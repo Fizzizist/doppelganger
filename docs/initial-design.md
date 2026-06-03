@@ -19,7 +19,7 @@ A Rust application with two faces:
 - **A TUI** (built with Ratatui) for the human to browse threads, read conversations, edit or delete messages, view diffs, and leave inline review comments.
 - **A CLI** for the LLM agent to read and post to threads programmatically.
 
-Both interfaces sit on the same core library backed by a TursoDB (libSQL) database stored **outside** the repository tree — typically under `~/.local/share/doppelganger/`. The conversation data is never in the repo, so the LLM cannot accidentally discover it during codebase operations.
+Both interfaces sit on the same core library backed by a TursoDB (libSQL) database stored at the root of the repository tree — typically at `.doppelganger.db`. The conversation data is never in the repo, so the LLM cannot accidentally discover it during codebase operations.
 
 Git operations are **read-only** from Doppelganger's perspective. It reads diffs and logs from the local repo to surface context, but never commits, pushes, or modifies the repository.
 
