@@ -87,7 +87,7 @@ Phases 1–3 produce a working replacement for the GitHub conversation layer. Ph
 
 ## Storage
 
-Conversation data lives at `~/.local/share/doppelganger/projects/<project-hash>/` — outside any git repository. Project hash is derived from the repo path so each repo gets its own conversation space automatically.
+Conversation data lives in a .db file at the root of the git repository.
 
 ## Key Design Decisions
 
