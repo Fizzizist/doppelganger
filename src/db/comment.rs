@@ -243,7 +243,7 @@ mod tests {
         let a = author::create(&conn, "Author", None)
             .await
             .expect("create author");
-        let iss = issue::create(&conn, "Issue", "desc", a.author_id)
+        let iss = issue::create(&conn, Some("Issue"), "desc", a.author_id)
             .await
             .expect("create issue");
 
@@ -269,7 +269,7 @@ mod tests {
         let a = author::create(&conn, "Author", None)
             .await
             .expect("create author");
-        let iss = issue::create(&conn, "Issue", "desc", a.author_id)
+        let iss = issue::create(&conn, Some("Issue"), "desc", a.author_id)
             .await
             .expect("create issue");
         let br = branch::create(&conn, "my-branch", "desc", a.author_id, iss.issue_id)

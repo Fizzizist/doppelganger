@@ -136,7 +136,7 @@ mod tests {
         let a = author::create(&conn, "Author1", None)
             .await
             .expect("create author");
-        let iss = issue::create(&conn, "Test issue", "desc", a.author_id)
+        let iss = issue::create(&conn, Some("Test issue"), "desc", a.author_id)
             .await
             .expect("create issue");
 

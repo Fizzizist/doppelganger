@@ -35,7 +35,8 @@ async fn handle_create(
         CreateCommand::Issue(args) => {
             let description =
                 core::create::read_text(args.description.as_deref(), args.file.as_deref())?;
-            let issue = core::create::create_issue(db, &repo, &args.name, &description).await?;
+            let issue =
+                core::create::create_issue(db, &repo, args.name.as_deref(), &description).await?;
             output::output(&issue)?;
         }
         CreateCommand::Branch(args) => {

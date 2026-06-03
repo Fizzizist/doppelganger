@@ -6,6 +6,26 @@ mod common;
 fn test_create_issue_with_description_flag() {
     let (tmp, _repo) = setup_repo();
     let output = dg_command_in_repo(tmp.path())
+        .args(["create", "issue", "--description", "A test description"])
+        .output()
+        .expect("run dg create issue");
+
+    assert!(
+        output.status.success(),
+        "command failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON output");
+    assert_eq!(parsed["description"], "A test description");
+    assert!(parsed["name"].is_null());
+}
+
+#[test]
+fn test_create_issue_with_optional_name() {
+    let (tmp, _repo) = setup_repo();
+    let output = dg_command_in_repo(tmp.path())
         .args([
             "create",
             "issue",
@@ -34,7 +54,7 @@ fn test_create_branch() {
     let (tmp, _repo) = setup_repo();
 
     let issue_output = dg_command_in_repo(tmp.path())
-        .args(["create", "issue", "--name", "Bug", "--description", "A bug"])
+        .args(["create", "issue", "--description", "A bug"])
         .output()
         .expect("run dg create issue");
 
@@ -73,14 +93,7 @@ fn test_create_issue_comment() {
     let (tmp, _repo) = setup_repo();
 
     let issue_output = dg_command_in_repo(tmp.path())
-        .args([
-            "create",
-            "issue",
-            "--name",
-            "Issue1",
-            "--description",
-            "Desc",
-        ])
+        .args(["create", "issue", "--description", "Desc"])
         .output()
         .expect("run dg create issue");
     assert!(issue_output.status.success());
@@ -118,14 +131,7 @@ fn test_create_branch_comment() {
     let (tmp, _repo) = setup_repo();
 
     let issue_output = dg_command_in_repo(tmp.path())
-        .args([
-            "create",
-            "issue",
-            "--name",
-            "Issue1",
-            "--description",
-            "Desc",
-        ])
+        .args(["create", "issue", "--description", "Desc"])
         .output()
         .expect("run dg create issue");
     assert!(issue_output.status.success());

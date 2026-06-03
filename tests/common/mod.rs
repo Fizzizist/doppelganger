@@ -31,7 +31,7 @@ pub fn setup_repo() -> (TempDir, git2::Repository) {
 }
 
 pub fn dg_command() -> Command {
-    Command::cargo_bin("doppelganger").expect("find binary")
+    Command::cargo_bin("dg").expect("find binary")
 }
 
 pub fn dg_command_in_repo(repo_path: &Path) -> Command {

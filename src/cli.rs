@@ -40,7 +40,7 @@ pub enum CreateCommand {
 #[derive(Parser, Debug)]
 pub struct CreateIssue {
     #[arg(long)]
-    pub name: String,
+    pub name: Option<String>,
     #[arg(long)]
     pub description: Option<String>,
     #[arg(long)]

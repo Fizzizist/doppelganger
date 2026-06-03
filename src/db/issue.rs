@@ -6,7 +6,7 @@ use crate::error::{Error, Result};
 #[derive(Debug, Serialize)]
 pub struct Issue {
     pub issue_id: i64,
-    pub name: String,
+    pub name: Option<String>,
     pub description: String,
     pub author_id: i64,
     pub created_at: String,
@@ -15,19 +15,33 @@ pub struct Issue {
 
 pub async fn create(
     conn: &Connection,
-    name: &str,
+    name: Option<&str>,
     description: &str,
     author_id: i64,
 ) -> Result<Issue> {
-    conn.execute(
-        "INSERT INTO issue (name, description, author_id) VALUES (?1, ?2, ?3)",
-        turso::params::Params::Positional(vec![
-            turso::Value::Text(name.to_string()),
-            turso::Value::Text(description.to_string()),
-            turso::Value::Integer(author_id),
-        ]),
-    )
-    .await?;
+    match name {
+        Some(n) => {
+            conn.execute(
+                "INSERT INTO issue (name, description, author_id) VALUES (?1, ?2, ?3)",
+                turso::params::Params::Positional(vec![
+                    turso::Value::Text(n.to_string()),
+                    turso::Value::Text(description.to_string()),
+                    turso::Value::Integer(author_id),
+                ]),
+            )
+            .await?;
+        }
+        None => {
+            conn.execute(
+                "INSERT INTO issue (description, author_id) VALUES (?1, ?2)",
+                turso::params::Params::Positional(vec![
+                    turso::Value::Text(description.to_string()),
+                    turso::Value::Integer(author_id),
+                ]),
+            )
+            .await?;
+        }
+    }
 
     let issue_id = conn.last_insert_rowid();
 
@@ -59,8 +73,9 @@ fn row_to_issue(row: &turso::Row) -> Result<Issue> {
         _ => return Err(Error::validation("issue_id must be integer")),
     };
     let name = match row.get_value(1)? {
-        turso::Value::Text(s) => s,
-        _ => return Err(Error::validation("name must be text")),
+        turso::Value::Null => None,
+        turso::Value::Text(s) => Some(s),
+        _ => return Err(Error::validation("name must be text or null")),
     };
     let description = match row.get_value(2)? {
         turso::Value::Text(s) => s,
@@ -105,7 +120,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_and_get_issue() {
+    async fn test_create_and_get_issue_with_name() {
         let db = setup_db().await;
         let conn = db.connect().expect("connect");
         let a = author::create(&conn, "TestAuthor", Some("test@example.com"))
@@ -114,14 +129,14 @@ mod tests {
 
         let issue = create(
             &conn,
-            "Bug in login",
+            Some("Bug in login"),
             "Login button does nothing",
             a.author_id,
         )
         .await
         .expect("create issue");
 
-        assert_eq!(issue.name, "Bug in login");
+        assert_eq!(issue.name, Some("Bug in login".to_string()));
         assert_eq!(issue.description, "Login button does nothing");
         assert_eq!(issue.author_id, a.author_id);
         assert!(issue.issue_id > 0);
@@ -130,7 +145,23 @@ mod tests {
             .await
             .expect("get_by_id")
             .expect("found");
-        assert_eq!(fetched.name, "Bug in login");
+        assert_eq!(fetched.name, Some("Bug in login".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_create_issue_without_name() {
+        let db = setup_db().await;
+        let conn = db.connect().expect("connect");
+        let a = author::create(&conn, "TestAuthor", None)
+            .await
+            .expect("create author");
+
+        let issue = create(&conn, None, "Just a description", a.author_id)
+            .await
+            .expect("create issue");
+
+        assert!(issue.name.is_none());
+        assert_eq!(issue.description, "Just a description");
     }
 
     #[tokio::test]

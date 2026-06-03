@@ -76,16 +76,21 @@ async fn test_issue_crud() {
     let a = author::create(&conn, "Author", None)
         .await
         .expect("create author");
-    let issue = issue::create(&conn, "Bug report", "Something is broken", a.author_id)
-        .await
-        .expect("create issue");
-    assert_eq!(issue.name, "Bug report");
+    let issue = issue::create(
+        &conn,
+        Some("Bug report"),
+        "Something is broken",
+        a.author_id,
+    )
+    .await
+    .expect("create issue");
+    assert_eq!(issue.name, Some("Bug report".to_string()));
 
     let fetched = issue::get_by_id(&conn, issue.issue_id)
         .await
         .expect("get_by_id")
         .expect("found");
-    assert_eq!(fetched.name, "Bug report");
+    assert_eq!(fetched.name, Some("Bug report".to_string()));
     assert_eq!(fetched.description, "Something is broken");
 
     let missing = issue::get_by_id(&conn, 99999).await.expect("get_by_id");
@@ -100,7 +105,7 @@ async fn test_branch_crud() {
     let a = author::create(&conn, "Author", None)
         .await
         .expect("create author");
-    let iss = issue::create(&conn, "Issue", "desc", a.author_id)
+    let iss = issue::create(&conn, Some("Issue"), "desc", a.author_id)
         .await
         .expect("create issue");
 
@@ -124,7 +129,7 @@ async fn test_comment_crud() {
     let a = author::create(&conn, "Author", None)
         .await
         .expect("create author");
-    let iss = issue::create(&conn, "Issue", "desc", a.author_id)
+    let iss = issue::create(&conn, Some("Issue"), "desc", a.author_id)
         .await
         .expect("create issue");
     let br = branch::create(&conn, "my-branch", "desc", a.author_id, iss.issue_id)

@@ -8,7 +8,7 @@ use crate::git;
 pub async fn create_issue(
     db: &Database,
     repo: &git2::Repository,
-    name: &str,
+    name: Option<&str>,
     description: &str,
 ) -> Result<issue::Issue> {
     let git_author = git::get_author(repo)?;
