@@ -99,14 +99,7 @@ fn test_read_branch() {
     let (tmp, _repo) = setup_repo();
 
     let issue_output = dg_command_in_repo(tmp.path())
-        .args([
-            "create",
-            "issue",
-            "--name",
-            "Branch Issue",
-            "--description",
-            "Branch test",
-        ])
+        .args(["create", "issue", "--description", "Branch test"])
         .output()
         .expect("run dg create issue");
     assert!(issue_output.status.success());
@@ -120,7 +113,6 @@ fn test_read_branch() {
             "create",
             "branch",
             &issue_id.to_string(),
-            "--name",
             "read-branch",
             "--description",
             "Branch desc",
@@ -150,14 +142,7 @@ fn test_read_branch_thread() {
     let (tmp, _repo) = setup_repo();
 
     let issue_output = dg_command_in_repo(tmp.path())
-        .args([
-            "create",
-            "issue",
-            "--name",
-            "Thread Branch Issue",
-            "--description",
-            "Thread",
-        ])
+        .args(["create", "issue", "--description", "Thread"])
         .output()
         .expect("run dg create issue");
     assert!(issue_output.status.success());
@@ -171,7 +156,6 @@ fn test_read_branch_thread() {
             "create",
             "branch",
             &issue_id.to_string(),
-            "--name",
             "thread-branch",
             "--description",
             "Branch thread",

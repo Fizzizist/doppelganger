@@ -50,7 +50,6 @@ pub struct CreateIssue {
 #[derive(Parser, Debug)]
 pub struct CreateBranch {
     pub issue_id: i64,
-    #[arg(long)]
     pub name: String,
     #[arg(long)]
     pub description: Option<String>,
