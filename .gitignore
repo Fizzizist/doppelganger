@@ -2,3 +2,4 @@
 .doppelganger.db
 .doppelganger.db-wal
 .doppelganger.db-shm
+.doppelganger.db-tshm
