@@ -1,1 +1,4 @@
 /target
+.doppelganger.db
+.doppelganger.db-wal
+.doppelganger.db-shm
