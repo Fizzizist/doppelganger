@@ -1,0 +1,24 @@
+---
+source: tests/tui_tests.rs
+expression: buffer_to_string(buffer)
+---
+┌Issues  (j/k=navigate  Enter/l=open  q=quit)──────────────┐
+│issue 0  #1                                               │
+│issue 1  #2                                               │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+└──────────────────────────────────────────────────────────┘

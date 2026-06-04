@@ -5,23 +5,32 @@ use crate::{
     git::current_branch,
     input::resolve_content,
     output::print_json,
+    tui,
 };
 
 pub async fn handle(
     cmd: BranchCommands,
-    db: &Database,
+    db_path: &str,
     repo: &git2::Repository,
     author_name: &str,
     author_email: Option<&str>,
 ) -> Result<()> {
-    match cmd {
+    // The TUI manages its own short-lived connections; it must never run while
+    // a persistent connection is held open or it will lock out other processes.
+    if let BranchCommands::Tui = cmd {
+        let branch_name = current_branch(repo)?;
+        return tui::run_branch_tui(db_path, &branch_name).await;
+    }
+
+    let db = Database::open(db_path).await?;
+    let dispatch = match cmd {
         BranchCommands::Create {
             issue_number,
             description,
             overwrite,
         } => {
             create(
-                db,
+                &db,
                 repo,
                 author_name,
                 author_email,
@@ -31,11 +40,17 @@ pub async fn handle(
             )
             .await
         }
-        BranchCommands::Read => read(db, repo).await,
+        BranchCommands::Read => read(&db, repo).await,
         BranchCommands::Comment { content } => {
-            comment_cmd(db, repo, author_name, author_email, content).await
+            comment_cmd(&db, repo, author_name, author_email, content).await
         }
-    }
+        BranchCommands::Tui => Ok(()),
+    };
+
+    let checkpoint = db.checkpoint().await;
+    dispatch?;
+    checkpoint?;
+    Ok(())
 }
 
 async fn create(

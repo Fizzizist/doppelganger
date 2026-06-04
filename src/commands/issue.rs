@@ -4,24 +4,38 @@ use crate::{
     error::Result,
     input::resolve_content,
     output::print_json,
+    tui,
 };
 
 pub async fn handle(
     cmd: IssueCommands,
-    db: &Database,
+    db_path: &str,
     author_name: &str,
     author_email: Option<&str>,
 ) -> Result<()> {
-    match cmd {
+    // The TUI manages its own short-lived connections; it must never run while
+    // a persistent connection is held open or it will lock out other processes.
+    if let IssueCommands::Tui = cmd {
+        return tui::run_issue_tui(db_path).await;
+    }
+
+    let db = Database::open(db_path).await?;
+    let dispatch = match cmd {
         IssueCommands::Create { content, name } => {
-            create(db, author_name, author_email, content, name).await
+            create(&db, author_name, author_email, content, name).await
         }
-        IssueCommands::Read { issue_number } => read(db, issue_number).await,
+        IssueCommands::Read { issue_number } => read(&db, issue_number).await,
         IssueCommands::Comment {
             issue_number,
             content,
-        } => comment(db, author_name, author_email, issue_number, content).await,
-    }
+        } => comment(&db, author_name, author_email, issue_number, content).await,
+        IssueCommands::Tui => Ok(()),
+    };
+
+    let checkpoint = db.checkpoint().await;
+    dispatch?;
+    checkpoint?;
+    Ok(())
 }
 
 async fn create(

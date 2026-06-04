@@ -58,3 +58,21 @@ fn row_to_issue(row: &turso::Row) -> Result<Issue> {
         updated_at: extract_text(row, 5)?,
     })
 }
+
+pub async fn list_issues(conn: &turso::Connection) -> Result<Vec<Issue>> {
+    let mut rows = conn
+        .query(
+            "SELECT issue.issue_id, issue.name, issue.description, author.name, \
+             issue.created_at, issue.updated_at \
+             FROM issue JOIN author ON issue.author_id = author.author_id \
+             ORDER BY issue.updated_at DESC",
+            (),
+        )
+        .await?;
+
+    let mut issues = Vec::new();
+    while let Some(row) = rows.next().await? {
+        issues.push(row_to_issue(&row)?);
+    }
+    Ok(issues)
+}
