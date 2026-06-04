@@ -6,13 +6,17 @@ use super::{
     row::{extract_int, extract_text},
 };
 
-const SELECT_ISSUE_COMMENT: &str = "SELECT issue_comment.issue_comment_id, issue_comment.content, author.name, \
-     issue_comment.issue_id, issue_comment.created_at, issue_comment.updated_at \
-     FROM issue_comment JOIN author ON issue_comment.author_id = author.author_id";
+const SELECT_ISSUE_COMMENT: &str = r#"
+SELECT issue_comment.issue_comment_id, issue_comment.content, author.name,
+       issue_comment.issue_id, issue_comment.created_at, issue_comment.updated_at
+FROM issue_comment JOIN author ON issue_comment.author_id = author.author_id
+"#;
 
-const SELECT_BRANCH_COMMENT: &str = "SELECT branch_comment.branch_comment_id, branch_comment.content, author.name, \
-     branch_comment.branch_id, branch_comment.created_at, branch_comment.updated_at \
-     FROM branch_comment JOIN author ON branch_comment.author_id = author.author_id";
+const SELECT_BRANCH_COMMENT: &str = r#"
+SELECT branch_comment.branch_comment_id, branch_comment.content, author.name,
+       branch_comment.branch_id, branch_comment.created_at, branch_comment.updated_at
+FROM branch_comment JOIN author ON branch_comment.author_id = author.author_id
+"#;
 
 pub async fn create_issue_comment(
     conn: &turso::Connection,

@@ -6,9 +6,11 @@ use super::{
     row::{extract_int, extract_text},
 };
 
-const SELECT_BRANCH: &str = "SELECT branch.branch_id, branch.name, branch.description, \
-     author.name, branch.issue_id, branch.created_at, branch.updated_at \
-     FROM branch JOIN author ON branch.author_id = author.author_id";
+const SELECT_BRANCH: &str = r#"
+SELECT branch.branch_id, branch.name, branch.description, author.name,
+       branch.issue_id, branch.created_at, branch.updated_at
+FROM branch JOIN author ON branch.author_id = author.author_id
+"#;
 
 pub async fn create(
     conn: &turso::Connection,
