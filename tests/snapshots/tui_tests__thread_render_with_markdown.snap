@@ -8,10 +8,10 @@ expression: buffer_to_string(buffer)
 ┌Thread  (j/k=scroll  Ctrl-u/d=page  q=quit)───────────────────────────────────┐
 │alice  ·  2024-06-15                                                          │
 │bold                                                                          │
-│# header                                                                      │
+│header                                                                        │
 │- list item                                                                   │
 │                                                                              │
-│────────────────────────────────────────────────────────────                  │
+│──────────────────────────────────────────────────────────────────────────────│
 │bob  ·  2024-06-16                                                            │
 │This is a comment with code.                                                  │
 │                                                                              │

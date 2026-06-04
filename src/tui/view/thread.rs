@@ -21,6 +21,9 @@ pub fn render(frame: &mut Frame, app: &App, thread: &Thread) {
         .style(Style::default().add_modifier(Modifier::BOLD));
     frame.render_widget(title_widget, chunks[0]);
 
+    // Content area width = outer width minus borders (2).
+    let content_width = chunks[1].width.saturating_sub(2);
+
     let mut lines: Vec<Line<'static>> = Vec::new();
 
     lines.push(Line::from(vec![
@@ -37,12 +40,12 @@ pub fn render(frame: &mut Frame, app: &App, thread: &Thread) {
         ),
     ]));
 
-    let desc = render_markdown(&thread.description);
+    let desc = render_markdown(&thread.description, content_width);
     lines.extend(desc.lines);
     lines.push(Line::from(""));
 
     lines.push(Line::from(Span::styled(
-        "─".repeat(60),
+        "─".repeat(content_width as usize),
         Style::default().fg(Color::DarkGray),
     )));
 
@@ -61,7 +64,7 @@ pub fn render(frame: &mut Frame, app: &App, thread: &Thread) {
             ),
         ]));
 
-        let comment_text = render_markdown(&comment.content);
+        let comment_text = render_markdown(&comment.content, content_width);
         lines.extend(comment_text.lines);
         lines.push(Line::from(""));
     }
