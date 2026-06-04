@@ -72,6 +72,59 @@ async fn issue_create_and_get() {
 }
 
 #[tokio::test]
+async fn issue_name_truncates_on_word_boundary() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let author = author::find_or_create(conn, "Author", Some("a@b.com"))
+        .await
+        .expect("create author");
+
+    // 16 words of 7 chars ("aaaaaaa") + spaces — long enough to require truncation.
+    let long_desc =
+        "aaaaaaa bbbbbbb ccccccc ddddddd eeeeeee fffffff ggggggg hhhhhhh iiiiiii jjjjjjj";
+    let created = issue::create(conn, long_desc, author.author_id)
+        .await
+        .expect("create issue");
+
+    assert!(
+        created.name.chars().count() <= 80,
+        "name should be at most 80 chars, got {}",
+        created.name.chars().count()
+    );
+    // Every retained token must be a whole 7-char word — no mid-word cut.
+    for token in created.name.split_whitespace() {
+        assert_eq!(
+            token.len(),
+            7,
+            "truncation must not split a word, got token: {token:?}"
+        );
+    }
+    assert_eq!(
+        created.description, long_desc,
+        "description should keep the full text"
+    );
+}
+
+#[tokio::test]
+async fn issue_name_uses_first_line() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let author = author::find_or_create(conn, "Author", Some("a@b.com"))
+        .await
+        .expect("create author");
+
+    let desc = "Short title\n\nLong body paragraph that continues on subsequent lines.";
+    let created = issue::create(conn, desc, author.author_id)
+        .await
+        .expect("create issue");
+
+    assert_eq!(created.name, "Short title");
+    assert_eq!(created.description, desc);
+}
+
+#[tokio::test]
 async fn issue_get_not_found() {
     let db = Database::open_in_memory().await.expect("open in-memory db");
     let conn = db.conn();
@@ -241,11 +294,9 @@ async fn branch_comments_create_and_list() {
 }
 
 #[tokio::test]
-async fn fk_branch_with_invalid_issue() {
-    // turso (libsql/SQLite) does not enforce FK constraints by default.
-    // The application-level validation happens in branch::create's caller
-    // (commands/branch.rs) which checks the issue exists before creating a branch.
-    // This test documents that the DB layer alone does NOT reject invalid issue_ids.
+async fn fk_branch_with_invalid_issue_is_rejected() {
+    // Database::open enables `PRAGMA foreign_keys = ON`, so inserting a branch
+    // that references a nonexistent issue must be rejected by the DB layer.
     let db = Database::open_in_memory().await.expect("open in-memory db");
     let conn = db.conn();
 
@@ -253,30 +304,51 @@ async fn fk_branch_with_invalid_issue() {
         .await
         .expect("create author");
 
-    // issue_id 99999 does not exist — insert still succeeds because FKs are not enforced
+    // issue_id 99999 does not exist — FK enforcement should reject the insert.
     let result = branch::create(conn, "feature", "desc", author.author_id, 99999).await;
     assert!(
-        result.is_ok(),
-        "turso does not enforce FK by default; the application layer validates issue existence"
+        result.is_err(),
+        "foreign key enforcement must reject a branch referencing a missing issue"
     );
 }
 
 #[tokio::test]
-async fn checkpoint_runs_without_error() {
+async fn checkpoint_truncates_wal_and_persists_data() {
     let tmp = tempfile::tempdir().expect("temp dir");
     let db_path = tmp.path().join("test.db");
+    let wal_path = tmp.path().join("test.db-wal");
     let db_path_str = db_path.to_str().expect("valid path");
 
-    let db = Database::open(db_path_str).await.expect("open local db");
-    let conn = db.conn();
+    let issue_id = {
+        let db = Database::open(db_path_str).await.expect("open local db");
+        let conn = db.conn();
 
-    // Write some data
-    let author = author::find_or_create(conn, "Checker", Some("c@d.com"))
-        .await
-        .expect("create author");
-    issue::create(conn, "checkpoint issue", author.author_id)
-        .await
-        .expect("create issue");
+        let author = author::find_or_create(conn, "Checker", Some("c@d.com"))
+            .await
+            .expect("create author");
+        let created = issue::create(conn, "checkpoint issue", author.author_id)
+            .await
+            .expect("create issue");
 
-    db.checkpoint().await.expect("checkpoint should succeed");
+        // The WAL should hold the just-written, uncheckpointed data.
+        let wal_before = std::fs::metadata(&wal_path).map(|m| m.len()).unwrap_or(0);
+        assert!(wal_before > 0, "WAL should be non-empty before checkpoint");
+
+        db.checkpoint().await.expect("checkpoint should succeed");
+
+        let wal_after = std::fs::metadata(&wal_path).map(|m| m.len()).unwrap_or(0);
+        assert!(
+            wal_after < wal_before,
+            "TRUNCATE checkpoint should shrink the WAL (before: {wal_before}, after: {wal_after})"
+        );
+
+        created.issue_id
+    };
+
+    // Reopen the database and confirm the data persisted past checkpoint + close.
+    let db = Database::open(db_path_str).await.expect("reopen local db");
+    let fetched = issue::get_by_id(db.conn(), issue_id)
+        .await
+        .expect("issue should persist after checkpoint and reopen");
+    assert_eq!(fetched.description, "checkpoint issue");
 }

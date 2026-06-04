@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::io::{IsTerminal, Read};
 
 pub fn resolve_content(arg: Option<String>) -> crate::error::Result<String> {
     match arg {
@@ -13,8 +13,14 @@ pub fn resolve_content(arg: Option<String>) -> crate::error::Result<String> {
             }
         }
         None => {
+            let stdin = std::io::stdin();
+            if stdin.is_terminal() {
+                return Err(crate::error::Error::Validation(
+                    "no content provided; pass it as an argument or pipe it via stdin".to_string(),
+                ));
+            }
             let mut buf = String::new();
-            std::io::stdin().read_to_string(&mut buf)?;
+            stdin.lock().read_to_string(&mut buf)?;
             let content = buf.trim().to_string();
             if content.is_empty() {
                 Err(crate::error::Error::Validation(

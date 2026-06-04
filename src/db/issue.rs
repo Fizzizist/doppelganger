@@ -1,13 +1,12 @@
 use crate::error::{Error, Result};
 use turso::Value;
 
-use super::{
-    author::{extract_int, extract_text},
-    models::Issue,
-};
+use super::{models::Issue, row::extract_int, row::extract_text};
+
+const NAME_MAX_CHARS: usize = 80;
 
 pub async fn create(conn: &turso::Connection, description: &str, author_id: i64) -> Result<Issue> {
-    let name: String = description.chars().take(80).collect();
+    let name = derive_name(description);
 
     conn.execute(
         "INSERT INTO issue (name, description, author_id) VALUES (?1, ?2, ?3)",
@@ -21,6 +20,21 @@ pub async fn create(conn: &turso::Connection, description: &str, author_id: i64)
 
     let issue_id = conn.last_insert_rowid();
     get_by_id(conn, issue_id).await
+}
+
+/// Derive a short title from the description: the first line, truncated to
+/// `NAME_MAX_CHARS` at a word boundary (never mid-word) when possible.
+fn derive_name(description: &str) -> String {
+    let first_line = description.lines().next().unwrap_or("").trim();
+    if first_line.chars().count() <= NAME_MAX_CHARS {
+        return first_line.to_string();
+    }
+
+    let truncated: String = first_line.chars().take(NAME_MAX_CHARS).collect();
+    match truncated.rsplit_once(char::is_whitespace) {
+        Some((head, _)) if !head.trim().is_empty() => head.trim_end().to_string(),
+        _ => truncated.trim_end().to_string(),
+    }
 }
 
 pub async fn get_by_id(conn: &turso::Connection, issue_id: i64) -> Result<Issue> {

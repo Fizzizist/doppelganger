@@ -29,16 +29,20 @@ async fn run() -> doppelganger::error::Result<()> {
 
     let db = Database::open(db_path_str).await?;
 
-    match cli.command {
+    let dispatch = match cli.command {
         Commands::Issue { command } => {
-            commands::issue::handle(command, &db, &author_name, author_email.as_deref()).await?;
+            commands::issue::handle(command, &db, &author_name, author_email.as_deref()).await
         }
         Commands::Branch { command } => {
             commands::branch::handle(command, &db, &repo, &author_name, author_email.as_deref())
-                .await?;
+                .await
         }
-    }
+    };
 
-    db.checkpoint().await?;
+    // Checkpoint regardless of dispatch outcome so the WAL does not grow
+    // unbounded across repeated failures. Surface a dispatch error first.
+    let checkpoint = db.checkpoint().await;
+    dispatch?;
+    checkpoint?;
     Ok(())
 }

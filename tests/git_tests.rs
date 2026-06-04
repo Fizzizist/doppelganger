@@ -1,10 +1,41 @@
 mod common;
 
+use std::sync::OnceLock;
+
 use common::TestRepo;
 use doppelganger::git::{author_from_config, current_branch, discover_repo};
+use tempfile::TempDir;
+
+/// Point libgit2's global/system/XDG config search paths at an empty directory
+/// so tests never resolve against the developer's real git config. Done exactly
+/// once for the whole test binary via `OnceLock`, which serializes all callers
+/// until the search paths are stable — so no concurrent config access races with
+/// the (process-global) `set_search_path` mutation.
+fn isolate_git_config() {
+    static EMPTY_CONFIG_DIR: OnceLock<TempDir> = OnceLock::new();
+    EMPTY_CONFIG_DIR.get_or_init(|| {
+        let dir = tempfile::tempdir().expect("temp config dir");
+        let path = dir.path().to_str().expect("utf-8 config path");
+        for level in [
+            git2::ConfigLevel::System,
+            git2::ConfigLevel::Global,
+            git2::ConfigLevel::XDG,
+            git2::ConfigLevel::ProgramData,
+        ] {
+            // SAFETY: invoked exactly once via OnceLock before any test performs
+            // git config access, so libgit2's search path is mutated with no
+            // concurrent reads/writes in flight.
+            unsafe {
+                git2::opts::set_search_path(level, path).expect("set git search path");
+            }
+        }
+        dir
+    });
+}
 
 #[tokio::test]
 async fn discover_repo_finds_git() {
+    isolate_git_config();
     let result = discover_repo();
     assert!(
         result.is_ok(),
@@ -14,6 +45,7 @@ async fn discover_repo_finds_git() {
 
 #[tokio::test]
 async fn discover_repo_fails_outside_git() {
+    isolate_git_config();
     let tmp = tempfile::tempdir().expect("temp dir");
     let old_cwd = std::env::current_dir().expect("current dir");
     std::env::set_current_dir(tmp.path()).expect("change dir");
@@ -37,54 +69,69 @@ async fn discover_repo_fails_outside_git() {
 
 #[tokio::test]
 async fn current_branch_returns_name() {
+    isolate_git_config();
     let repo_dir = TestRepo::new_with_commit();
     let repo = git2::Repository::open(&repo_dir.path).expect("open repo");
 
     let branch = current_branch(&repo).expect("current branch should work");
-    // git 2.28+ defaults to "trunk", older versions default to "master"
+    // git 2.28+ defaults to "main"/"trunk"; older versions default to "master".
     assert!(
-        branch == "master" || branch == "trunk",
-        "default branch should be 'master' or 'trunk', got: {branch}"
+        !branch.is_empty(),
+        "current_branch should return a non-empty branch name, got: {branch:?}"
     );
+}
+
+#[tokio::test]
+async fn current_branch_detached_head_errors() {
+    isolate_git_config();
+    let repo_dir = TestRepo::new_with_commit();
+    let repo = git2::Repository::open(&repo_dir.path).expect("open repo");
+
+    // Detach HEAD onto the current commit.
+    let head_commit = repo
+        .head()
+        .expect("head")
+        .peel_to_commit()
+        .expect("peel to commit");
+    repo.set_head_detached(head_commit.id())
+        .expect("detach head");
+
+    let result = current_branch(&repo);
+    match result {
+        Err(doppelganger::error::Error::DetachedHead) => {}
+        Err(e) => panic!("expected DetachedHead, got: {e}"),
+        Ok(name) => panic!("expected DetachedHead, got branch name: {name}"),
+    }
 }
 
 #[tokio::test]
 async fn author_from_config_with_email() {
+    isolate_git_config();
     let repo_dir = TestRepo::new();
     let repo = git2::Repository::open(&repo_dir.path).expect("open repo");
 
     let (name, email) = author_from_config(&repo).expect("author_from_config should succeed");
-    // Local config is set to "Test User" / "test@example.com", but git2::Config::get_string
-    // resolves from local → global → system. If the global config exists it may override.
-    // The key invariant: name is Some, email is Some (either from local or global).
-    assert!(!name.is_empty(), "name should not be empty");
-    assert!(
-        email.is_some(),
-        "email should be present (from local or global config)"
+    assert_eq!(name, "Test User");
+    assert_eq!(email.as_deref(), Some("test@example.com"));
+}
+
+#[tokio::test]
+async fn author_from_config_without_email_is_none() {
+    isolate_git_config();
+    let repo_dir = TestRepo::new_no_email();
+    let repo = git2::Repository::open(&repo_dir.path).expect("open repo");
+
+    let (name, email) = author_from_config(&repo).expect("author_from_config should succeed");
+    assert_eq!(name, "Test User");
+    assert_eq!(
+        email, None,
+        "email must be None when not configured anywhere"
     );
 }
 
 #[tokio::test]
-async fn author_from_config_without_local_email() {
-    let repo_dir = TestRepo::new_no_email();
-    let repo = git2::Repository::open(&repo_dir.path).expect("open repo");
-
-    // No local user.email. The system may or may not have a global email.
-    // Either way, author_from_config should succeed (user.name is set locally).
-    let (name, _email) = author_from_config(&repo).expect("author_from_config should succeed");
-    assert!(!name.is_empty(), "name should not be empty");
-}
-
-#[tokio::test]
 async fn author_from_config_missing_name() {
-    // Create a repo without user.name. To avoid system-level user.name leaking through,
-    // we unset it via the local config by setting an explicit "unset" — but git2 has no
-    // "unset". Instead, we test the behavior of the function in the project's own repo
-    // where user.name IS configured, and verify it succeeds.
-    //
-    // For the missing-name case, we can't easily isolate from global config.
-    // Instead verify: in a fresh repo with no local name, the system global name
-    // is picked up (git2::config.get_string searches local → global → system).
+    isolate_git_config();
     let dir = tempfile::tempdir().expect("temp dir");
     let path = dir.path().to_path_buf();
     git2::Repository::init(&path).expect("git init");
@@ -92,18 +139,9 @@ async fn author_from_config_missing_name() {
     let repo = git2::Repository::open(&path).expect("open repo");
     let result = author_from_config(&repo);
 
-    // git2 searches local → global → system. If the test machine has a global user.name
-    // set, this succeeds. If not, it returns MissingAuthorName.
     match result {
-        Ok((name, _)) => {
-            assert!(
-                !name.is_empty(),
-                "name should not be empty if found in global/system"
-            );
-        }
-        Err(doppelganger::error::Error::MissingAuthorName) => {
-            // Expected when no global/system user.name exists
-        }
-        Err(e) => panic!("unexpected error: {e}"),
+        Err(doppelganger::error::Error::MissingAuthorName) => {}
+        Err(e) => panic!("expected MissingAuthorName, got: {e}"),
+        Ok((name, _)) => panic!("expected MissingAuthorName, got name: {name}"),
     }
 }

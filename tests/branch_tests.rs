@@ -75,6 +75,40 @@ async fn branch_create_duplicate_fails() {
         "duplicate create should fail: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("already exists"),
+        "stderr should report the duplicate branch, got: {stderr}"
+    );
+}
+
+#[tokio::test]
+async fn branch_overwrite_creates_when_no_record() {
+    let repo = TestRepo::new_with_commit();
+    setup_with_issue(&repo);
+
+    // --overwrite with no existing record should create it, not error.
+    let output = dg_command()
+        .current_dir(&repo.path)
+        .arg("branch")
+        .arg("create")
+        .arg("1")
+        .arg("fresh via overwrite")
+        .arg("--overwrite")
+        .output()
+        .expect("command failed to execute");
+    assert!(
+        output.status.success(),
+        "overwrite-create should succeed when no record exists: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = std::str::from_utf8(&output.stdout).expect("valid utf8");
+    let json: serde_json::Value = serde_json::from_str(stdout).expect("valid JSON");
+    assert_eq!(
+        json.get("description").and_then(|v| v.as_str()),
+        Some("fresh via overwrite")
+    );
 }
 
 #[tokio::test]
@@ -166,6 +200,33 @@ async fn branch_read_no_record() {
         "should fail when no branch record exists: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("branch create"),
+        "stderr should prompt the user to create a branch, got: {stderr}"
+    );
+}
+
+#[tokio::test]
+async fn branch_comment_no_record() {
+    let repo = TestRepo::new_with_commit();
+    let output = dg_command()
+        .current_dir(&repo.path)
+        .arg("branch")
+        .arg("comment")
+        .arg("orphan comment")
+        .output()
+        .expect("command failed to execute");
+    assert!(
+        !output.status.success(),
+        "comment should fail when no branch record exists: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("branch create"),
+        "stderr should prompt the user to create a branch, got: {stderr}"
+    );
 }
 
 #[tokio::test]
@@ -217,5 +278,10 @@ async fn branch_create_invalid_issue() {
         !output.status.success(),
         "should fail for nonexistent issue: {}",
         String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not found"),
+        "stderr should report the missing issue, got: {stderr}"
     );
 }

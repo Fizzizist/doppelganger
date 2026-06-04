@@ -31,7 +31,22 @@ async fn issue_create_via_arg() {
         json.get("description").and_then(|v| v.as_str()),
         Some("My first issue")
     );
+    assert_eq!(
+        json.get("name").and_then(|v| v.as_str()),
+        Some("My first issue")
+    );
+    assert_eq!(
+        json.get("author").and_then(|v| v.as_str()),
+        Some("Test User"),
+        "author should be the local git config user.name"
+    );
     assert!(json.get("created_at").is_some(), "should have created_at");
+    assert!(json.get("updated_at").is_some(), "should have updated_at");
+    // No author_id should leak into the output.
+    assert!(
+        json.get("author_id").is_none(),
+        "author_id must not be exposed in output"
+    );
 }
 
 #[tokio::test]
@@ -69,6 +84,32 @@ async fn issue_create_empty_fails() {
         .output()
         .expect("command failed to execute");
     assert!(!output.status.success(), "should fail on empty input");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("empty"),
+        "stderr should explain the empty-content error, got: {stderr}"
+    );
+}
+
+#[tokio::test]
+async fn issue_create_empty_stdin_fails() {
+    let repo = TestRepo::new();
+    let output = dg_command()
+        .current_dir(&repo.path)
+        .arg("issue")
+        .arg("create")
+        .write_stdin("   \n")
+        .output()
+        .expect("command failed to execute");
+    assert!(
+        !output.status.success(),
+        "should fail on whitespace-only stdin"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("empty"),
+        "stderr should explain the empty-content error, got: {stderr}"
+    );
 }
 
 #[tokio::test]
@@ -125,6 +166,11 @@ async fn issue_read_not_found() {
         .output()
         .expect("command failed to execute");
     assert!(!output.status.success(), "should fail on nonexistent issue");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not found"),
+        "stderr should report the missing issue, got: {stderr}"
+    );
 }
 
 #[tokio::test]
@@ -208,4 +254,9 @@ async fn no_git_repo_fails() {
         .output()
         .expect("command failed to execute");
     assert!(!output.status.success(), "should fail outside git repo");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("repository"),
+        "stderr should report the missing git repository, got: {stderr}"
+    );
 }

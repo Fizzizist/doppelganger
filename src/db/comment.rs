@@ -1,10 +1,18 @@
-use crate::error::Result;
+use crate::error::{Error, Result};
 use turso::Value;
 
 use super::{
-    author::{extract_int, extract_text},
     models::{BranchComment, IssueComment},
+    row::{extract_int, extract_text},
 };
+
+const SELECT_ISSUE_COMMENT: &str = "SELECT issue_comment.issue_comment_id, issue_comment.content, author.name, \
+     issue_comment.issue_id, issue_comment.created_at, issue_comment.updated_at \
+     FROM issue_comment JOIN author ON issue_comment.author_id = author.author_id";
+
+const SELECT_BRANCH_COMMENT: &str = "SELECT branch_comment.branch_comment_id, branch_comment.content, author.name, \
+     branch_comment.branch_id, branch_comment.created_at, branch_comment.updated_at \
+     FROM branch_comment JOIN author ON branch_comment.author_id = author.author_id";
 
 pub async fn create_issue_comment(
     conn: &turso::Connection,
@@ -25,19 +33,17 @@ pub async fn create_issue_comment(
     let comment_id = conn.last_insert_rowid();
     let mut rows = conn
         .query(
-            "SELECT issue_comment.issue_comment_id, issue_comment.content, author.name, \
-             issue_comment.issue_id, issue_comment.created_at, issue_comment.updated_at \
-             FROM issue_comment JOIN author ON issue_comment.author_id = author.author_id \
-             WHERE issue_comment.issue_comment_id = ?1",
+            format!("{SELECT_ISSUE_COMMENT} WHERE issue_comment.issue_comment_id = ?1"),
             turso::params::Params::Positional(vec![Value::Integer(comment_id)]),
         )
         .await?;
 
-    let row = rows
-        .next()
-        .await?
-        .expect("just-inserted issue_comment must exist");
-    row_to_issue_comment(&row)
+    match rows.next().await? {
+        Some(row) => row_to_issue_comment(&row),
+        None => Err(Error::Database(turso::Error::ConversionFailure(
+            "just-inserted issue_comment could not be read back".to_string(),
+        ))),
+    }
 }
 
 pub async fn list_issue_comments(
@@ -46,10 +52,10 @@ pub async fn list_issue_comments(
 ) -> Result<Vec<IssueComment>> {
     let mut rows = conn
         .query(
-            "SELECT issue_comment.issue_comment_id, issue_comment.content, author.name, \
-             issue_comment.issue_id, issue_comment.created_at, issue_comment.updated_at \
-             FROM issue_comment JOIN author ON issue_comment.author_id = author.author_id \
-             WHERE issue_comment.issue_id = ?1 ORDER BY issue_comment.created_at ASC",
+            format!(
+                "{SELECT_ISSUE_COMMENT} WHERE issue_comment.issue_id = ?1 \
+                 ORDER BY issue_comment.created_at ASC"
+            ),
             turso::params::Params::Positional(vec![Value::Integer(issue_id)]),
         )
         .await?;
@@ -80,19 +86,17 @@ pub async fn create_branch_comment(
     let comment_id = conn.last_insert_rowid();
     let mut rows = conn
         .query(
-            "SELECT branch_comment.branch_comment_id, branch_comment.content, author.name, \
-             branch_comment.branch_id, branch_comment.created_at, branch_comment.updated_at \
-             FROM branch_comment JOIN author ON branch_comment.author_id = author.author_id \
-             WHERE branch_comment.branch_comment_id = ?1",
+            format!("{SELECT_BRANCH_COMMENT} WHERE branch_comment.branch_comment_id = ?1"),
             turso::params::Params::Positional(vec![Value::Integer(comment_id)]),
         )
         .await?;
 
-    let row = rows
-        .next()
-        .await?
-        .expect("just-inserted branch_comment must exist");
-    row_to_branch_comment(&row)
+    match rows.next().await? {
+        Some(row) => row_to_branch_comment(&row),
+        None => Err(Error::Database(turso::Error::ConversionFailure(
+            "just-inserted branch_comment could not be read back".to_string(),
+        ))),
+    }
 }
 
 pub async fn list_branch_comments(
@@ -101,10 +105,10 @@ pub async fn list_branch_comments(
 ) -> Result<Vec<BranchComment>> {
     let mut rows = conn
         .query(
-            "SELECT branch_comment.branch_comment_id, branch_comment.content, author.name, \
-             branch_comment.branch_id, branch_comment.created_at, branch_comment.updated_at \
-             FROM branch_comment JOIN author ON branch_comment.author_id = author.author_id \
-             WHERE branch_comment.branch_id = ?1 ORDER BY branch_comment.created_at ASC",
+            format!(
+                "{SELECT_BRANCH_COMMENT} WHERE branch_comment.branch_id = ?1 \
+                 ORDER BY branch_comment.created_at ASC"
+            ),
             turso::params::Params::Positional(vec![Value::Integer(branch_id)]),
         )
         .await?;

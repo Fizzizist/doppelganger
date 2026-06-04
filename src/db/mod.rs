@@ -3,6 +3,7 @@ pub mod branch;
 pub mod comment;
 pub mod issue;
 pub mod models;
+pub mod row;
 pub mod schema;
 
 use crate::error::Result;
@@ -16,7 +17,7 @@ impl Database {
         let db = turso::Builder::new_local(path).build().await?;
         let conn = db.connect()?;
         let database = Self { conn };
-        database.migrate().await?;
+        database.prepare().await?;
         Ok(database)
     }
 
@@ -24,8 +25,13 @@ impl Database {
         let db = turso::Builder::new_local(":memory:").build().await?;
         let conn = db.connect()?;
         let database = Self { conn };
-        database.migrate().await?;
+        database.prepare().await?;
         Ok(database)
+    }
+
+    async fn prepare(&self) -> Result<()> {
+        self.conn.execute("PRAGMA foreign_keys = ON", ()).await?;
+        self.migrate().await
     }
 
     pub async fn migrate(&self) -> Result<()> {

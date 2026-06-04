@@ -2,9 +2,13 @@ use crate::error::{Error, Result};
 use turso::Value;
 
 use super::{
-    author::{extract_int, extract_text},
     models::Branch,
+    row::{extract_int, extract_text},
 };
+
+const SELECT_BRANCH: &str = "SELECT branch.branch_id, branch.name, branch.description, \
+     author.name, branch.issue_id, branch.created_at, branch.updated_at \
+     FROM branch JOIN author ON branch.author_id = author.author_id";
 
 pub async fn create(
     conn: &turso::Connection,
@@ -41,10 +45,7 @@ pub async fn create(
 pub async fn get_by_name(conn: &turso::Connection, name: &str) -> Result<Branch> {
     let mut rows = conn
         .query(
-            "SELECT branch.branch_id, branch.name, branch.description, author.name, \
-             branch.issue_id, branch.created_at, branch.updated_at \
-             FROM branch JOIN author ON branch.author_id = author.author_id \
-             WHERE branch.name = ?1",
+            format!("{SELECT_BRANCH} WHERE branch.name = ?1"),
             turso::params::Params::Positional(vec![Value::Text(name.to_string())]),
         )
         .await?;
@@ -58,10 +59,7 @@ pub async fn get_by_name(conn: &turso::Connection, name: &str) -> Result<Branch>
 pub async fn get_by_id(conn: &turso::Connection, branch_id: i64) -> Result<Branch> {
     let mut rows = conn
         .query(
-            "SELECT branch.branch_id, branch.name, branch.description, author.name, \
-             branch.issue_id, branch.created_at, branch.updated_at \
-             FROM branch JOIN author ON branch.author_id = author.author_id \
-             WHERE branch.branch_id = ?1",
+            format!("{SELECT_BRANCH} WHERE branch.branch_id = ?1"),
             turso::params::Params::Positional(vec![Value::Integer(branch_id)]),
         )
         .await?;

@@ -11,9 +11,7 @@ pub fn repo_root(repo: &git2::Repository) -> crate::error::Result<std::path::Pat
 pub fn author_from_config(
     repo: &git2::Repository,
 ) -> crate::error::Result<(String, Option<String>)> {
-    let config = repo
-        .config()
-        .expect("repository config should always be accessible");
+    let config = repo.config()?;
     let name = config
         .get_string("user.name")
         .map_err(|_| crate::error::Error::MissingAuthorName)?;
@@ -22,6 +20,9 @@ pub fn author_from_config(
 }
 
 pub fn current_branch(repo: &git2::Repository) -> crate::error::Result<String> {
+    if repo.head_detached()? {
+        return Err(crate::error::Error::DetachedHead);
+    }
     let head = repo.head()?;
     let shorthand = head.shorthand()?;
     Ok(shorthand.to_string())

@@ -1,10 +1,6 @@
 use crate::{
     cli::IssueCommands,
-    db::{
-        Database, author, comment,
-        issue::{self},
-        models::IssueWithComments,
-    },
+    db::{Database, author, comment, issue, models::IssueWithComments},
     error::Result,
     input::resolve_content,
     output::print_json,

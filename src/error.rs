@@ -5,6 +5,9 @@ pub enum Error {
     #[error("not inside a git repository")]
     NoRepository,
 
+    #[error("HEAD is detached; check out a branch before using doppelganger")]
+    DetachedHead,
+
     #[error("git config user.name is required but not set")]
     MissingAuthorName,
 

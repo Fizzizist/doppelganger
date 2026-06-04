@@ -1,12 +1,7 @@
 use crate::{
     cli::BranchCommands,
-    db::{
-        Database, author,
-        branch::{self},
-        comment, issue,
-        models::BranchWithComments,
-    },
-    error::Result,
+    db::{Database, author, branch, comment, issue, models::BranchWithComments},
+    error::{Error, Result},
     git::current_branch,
     input::resolve_content,
     output::print_json,
@@ -59,12 +54,12 @@ async fn create(
     issue::get_by_id(conn, issue_number).await?;
     let author = author::find_or_create(conn, author_name, author_email).await?;
 
-    if overwrite {
-        let created = match branch::get_by_name(conn, &branch_name).await {
+    let created = if overwrite {
+        match branch::get_by_name(conn, &branch_name).await {
             Ok(_existing) => {
                 branch::update_description(conn, &branch_name, &description_text).await?
             }
-            Err(_) => {
+            Err(Error::BranchNotFound(_)) => {
                 branch::create(
                     conn,
                     &branch_name,
@@ -74,19 +69,19 @@ async fn create(
                 )
                 .await?
             }
-        };
-        print_json(&created)
+            Err(e) => return Err(e),
+        }
     } else {
-        let created = branch::create(
+        branch::create(
             conn,
             &branch_name,
             &description_text,
             author.author_id,
             issue_number,
         )
-        .await?;
-        print_json(&created)
-    }
+        .await?
+    };
+    print_json(&created)
 }
 
 async fn read(db: &Database, repo: &git2::Repository) -> Result<()> {
