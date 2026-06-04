@@ -10,7 +10,7 @@ pub struct Issue {
     pub issue_id: i64,
     pub name: String,
     pub description: String,
-    pub author_id: i64,
+    pub author: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -20,7 +20,7 @@ pub struct Branch {
     pub branch_id: i64,
     pub name: String,
     pub description: String,
-    pub author_id: i64,
+    pub author: String,
     pub issue_id: i64,
     pub created_at: String,
     pub updated_at: String,
@@ -30,7 +30,7 @@ pub struct Branch {
 pub struct IssueComment {
     pub issue_comment_id: i64,
     pub content: String,
-    pub author_id: i64,
+    pub author: String,
     pub issue_id: i64,
     pub created_at: String,
     pub updated_at: String,
@@ -40,7 +40,7 @@ pub struct IssueComment {
 pub struct BranchComment {
     pub branch_comment_id: i64,
     pub content: String,
-    pub author_id: i64,
+    pub author: String,
     pub branch_id: i64,
     pub created_at: String,
     pub updated_at: String,

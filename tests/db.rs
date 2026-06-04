@@ -63,7 +63,7 @@ async fn issue_create_and_get() {
         created.description, long_desc,
         "description should be the full text"
     );
-    assert_eq!(created.author_id, author.author_id);
+    assert_eq!(created.author, author.name);
 
     let fetched = issue::get_by_id(conn, created.issue_id)
         .await

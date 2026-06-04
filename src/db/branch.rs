@@ -41,8 +41,10 @@ pub async fn create(
 pub async fn get_by_name(conn: &turso::Connection, name: &str) -> Result<Branch> {
     let mut rows = conn
         .query(
-            "SELECT branch_id, name, description, author_id, issue_id, created_at, updated_at \
-             FROM branch WHERE name = ?1",
+            "SELECT branch.branch_id, branch.name, branch.description, author.name, \
+             branch.issue_id, branch.created_at, branch.updated_at \
+             FROM branch JOIN author ON branch.author_id = author.author_id \
+             WHERE branch.name = ?1",
             turso::params::Params::Positional(vec![Value::Text(name.to_string())]),
         )
         .await?;
@@ -56,8 +58,10 @@ pub async fn get_by_name(conn: &turso::Connection, name: &str) -> Result<Branch>
 pub async fn get_by_id(conn: &turso::Connection, branch_id: i64) -> Result<Branch> {
     let mut rows = conn
         .query(
-            "SELECT branch_id, name, description, author_id, issue_id, created_at, updated_at \
-             FROM branch WHERE branch_id = ?1",
+            "SELECT branch.branch_id, branch.name, branch.description, author.name, \
+             branch.issue_id, branch.created_at, branch.updated_at \
+             FROM branch JOIN author ON branch.author_id = author.author_id \
+             WHERE branch.branch_id = ?1",
             turso::params::Params::Positional(vec![Value::Integer(branch_id)]),
         )
         .await?;
@@ -90,7 +94,7 @@ fn row_to_branch(row: &turso::Row) -> Result<Branch> {
         branch_id: extract_int(row, 0)?,
         name: extract_text(row, 1)?,
         description: extract_text(row, 2)?,
-        author_id: extract_int(row, 3)?,
+        author: extract_text(row, 3)?,
         issue_id: extract_int(row, 4)?,
         created_at: extract_text(row, 5)?,
         updated_at: extract_text(row, 6)?,

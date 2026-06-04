@@ -25,8 +25,10 @@ pub async fn create_issue_comment(
     let comment_id = conn.last_insert_rowid();
     let mut rows = conn
         .query(
-            "SELECT issue_comment_id, content, author_id, issue_id, created_at, updated_at \
-             FROM issue_comment WHERE issue_comment_id = ?1",
+            "SELECT issue_comment.issue_comment_id, issue_comment.content, author.name, \
+             issue_comment.issue_id, issue_comment.created_at, issue_comment.updated_at \
+             FROM issue_comment JOIN author ON issue_comment.author_id = author.author_id \
+             WHERE issue_comment.issue_comment_id = ?1",
             turso::params::Params::Positional(vec![Value::Integer(comment_id)]),
         )
         .await?;
@@ -44,8 +46,10 @@ pub async fn list_issue_comments(
 ) -> Result<Vec<IssueComment>> {
     let mut rows = conn
         .query(
-            "SELECT issue_comment_id, content, author_id, issue_id, created_at, updated_at \
-             FROM issue_comment WHERE issue_id = ?1 ORDER BY created_at ASC",
+            "SELECT issue_comment.issue_comment_id, issue_comment.content, author.name, \
+             issue_comment.issue_id, issue_comment.created_at, issue_comment.updated_at \
+             FROM issue_comment JOIN author ON issue_comment.author_id = author.author_id \
+             WHERE issue_comment.issue_id = ?1 ORDER BY issue_comment.created_at ASC",
             turso::params::Params::Positional(vec![Value::Integer(issue_id)]),
         )
         .await?;
@@ -76,8 +80,10 @@ pub async fn create_branch_comment(
     let comment_id = conn.last_insert_rowid();
     let mut rows = conn
         .query(
-            "SELECT branch_comment_id, content, author_id, branch_id, created_at, updated_at \
-             FROM branch_comment WHERE branch_comment_id = ?1",
+            "SELECT branch_comment.branch_comment_id, branch_comment.content, author.name, \
+             branch_comment.branch_id, branch_comment.created_at, branch_comment.updated_at \
+             FROM branch_comment JOIN author ON branch_comment.author_id = author.author_id \
+             WHERE branch_comment.branch_comment_id = ?1",
             turso::params::Params::Positional(vec![Value::Integer(comment_id)]),
         )
         .await?;
@@ -95,8 +101,10 @@ pub async fn list_branch_comments(
 ) -> Result<Vec<BranchComment>> {
     let mut rows = conn
         .query(
-            "SELECT branch_comment_id, content, author_id, branch_id, created_at, updated_at \
-             FROM branch_comment WHERE branch_id = ?1 ORDER BY created_at ASC",
+            "SELECT branch_comment.branch_comment_id, branch_comment.content, author.name, \
+             branch_comment.branch_id, branch_comment.created_at, branch_comment.updated_at \
+             FROM branch_comment JOIN author ON branch_comment.author_id = author.author_id \
+             WHERE branch_comment.branch_id = ?1 ORDER BY branch_comment.created_at ASC",
             turso::params::Params::Positional(vec![Value::Integer(branch_id)]),
         )
         .await?;
@@ -112,7 +120,7 @@ fn row_to_issue_comment(row: &turso::Row) -> Result<IssueComment> {
     Ok(IssueComment {
         issue_comment_id: extract_int(row, 0)?,
         content: extract_text(row, 1)?,
-        author_id: extract_int(row, 2)?,
+        author: extract_text(row, 2)?,
         issue_id: extract_int(row, 3)?,
         created_at: extract_text(row, 4)?,
         updated_at: extract_text(row, 5)?,
@@ -123,7 +131,7 @@ fn row_to_branch_comment(row: &turso::Row) -> Result<BranchComment> {
     Ok(BranchComment {
         branch_comment_id: extract_int(row, 0)?,
         content: extract_text(row, 1)?,
-        author_id: extract_int(row, 2)?,
+        author: extract_text(row, 2)?,
         branch_id: extract_int(row, 3)?,
         created_at: extract_text(row, 4)?,
         updated_at: extract_text(row, 5)?,
