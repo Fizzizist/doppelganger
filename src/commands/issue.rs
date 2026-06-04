@@ -13,7 +13,9 @@ pub async fn handle(
     author_email: Option<&str>,
 ) -> Result<()> {
     match cmd {
-        IssueCommands::Create { content } => create(db, author_name, author_email, content).await,
+        IssueCommands::Create { content, name } => {
+            create(db, author_name, author_email, content, name).await
+        }
         IssueCommands::Read { issue_number } => read(db, issue_number).await,
         IssueCommands::Comment {
             issue_number,
@@ -27,11 +29,12 @@ async fn create(
     author_name: &str,
     author_email: Option<&str>,
     content: Option<String>,
+    name: Option<String>,
 ) -> Result<()> {
     let description = resolve_content(content)?;
     let conn = db.conn();
     let author = author::find_or_create(conn, author_name, author_email).await?;
-    let created = issue::create(conn, &description, author.author_id).await?;
+    let created = issue::create(conn, name.as_deref(), &description, author.author_id).await?;
     print_json(&created)
 }
 

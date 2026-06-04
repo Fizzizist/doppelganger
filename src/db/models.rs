@@ -8,7 +8,7 @@ pub struct Author {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Issue {
     pub issue_id: i64,
-    pub name: String,
+    pub name: Option<String>,
     pub description: String,
     pub author: String,
     pub created_at: String,

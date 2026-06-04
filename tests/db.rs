@@ -50,78 +50,27 @@ async fn issue_create_and_get() {
         .await
         .expect("create author");
 
-    let long_desc = "This is a very long description that is definitely more than eighty characters long and should be truncated for the name field but kept in full for description";
-    let created = issue::create(conn, long_desc, author.author_id)
+    let desc = "A description without a name";
+    let created = issue::create(conn, None, desc, author.author_id)
         .await
-        .expect("create issue");
+        .expect("create issue without name");
 
-    assert!(
-        created.name.len() <= 80,
-        "name should be truncated to 80 chars"
-    );
-    assert_eq!(
-        created.description, long_desc,
-        "description should be the full text"
-    );
+    assert_eq!(created.name, None, "name should be None when not provided");
+    assert_eq!(created.description, desc);
     assert_eq!(created.author, author.name);
+
+    let created_named = issue::create(conn, Some("My Issue"), desc, author.author_id)
+        .await
+        .expect("create issue with name");
+
+    assert_eq!(created_named.name.as_deref(), Some("My Issue"));
+    assert_eq!(created_named.description, desc);
 
     let fetched = issue::get_by_id(conn, created.issue_id)
         .await
         .expect("get issue by id");
     assert_eq!(fetched.issue_id, created.issue_id);
-}
-
-#[tokio::test]
-async fn issue_name_truncates_on_word_boundary() {
-    let db = Database::open_in_memory().await.expect("open in-memory db");
-    let conn = db.conn();
-
-    let author = author::find_or_create(conn, "Author", Some("a@b.com"))
-        .await
-        .expect("create author");
-
-    // 16 words of 7 chars ("aaaaaaa") + spaces — long enough to require truncation.
-    let long_desc =
-        "aaaaaaa bbbbbbb ccccccc ddddddd eeeeeee fffffff ggggggg hhhhhhh iiiiiii jjjjjjj";
-    let created = issue::create(conn, long_desc, author.author_id)
-        .await
-        .expect("create issue");
-
-    assert!(
-        created.name.chars().count() <= 80,
-        "name should be at most 80 chars, got {}",
-        created.name.chars().count()
-    );
-    // Every retained token must be a whole 7-char word — no mid-word cut.
-    for token in created.name.split_whitespace() {
-        assert_eq!(
-            token.len(),
-            7,
-            "truncation must not split a word, got token: {token:?}"
-        );
-    }
-    assert_eq!(
-        created.description, long_desc,
-        "description should keep the full text"
-    );
-}
-
-#[tokio::test]
-async fn issue_name_uses_first_line() {
-    let db = Database::open_in_memory().await.expect("open in-memory db");
-    let conn = db.conn();
-
-    let author = author::find_or_create(conn, "Author", Some("a@b.com"))
-        .await
-        .expect("create author");
-
-    let desc = "Short title\n\nLong body paragraph that continues on subsequent lines.";
-    let created = issue::create(conn, desc, author.author_id)
-        .await
-        .expect("create issue");
-
-    assert_eq!(created.name, "Short title");
-    assert_eq!(created.description, desc);
+    assert_eq!(fetched.name, None);
 }
 
 #[tokio::test]
@@ -147,7 +96,7 @@ async fn branch_create_and_get_by_name() {
     let author = author::find_or_create(conn, "Dev", Some("dev@x.com"))
         .await
         .expect("create author");
-    let iss = issue::create(conn, "Fix bug", author.author_id)
+    let iss = issue::create(conn, None, "Fix bug", author.author_id)
         .await
         .expect("create issue");
 
@@ -172,7 +121,7 @@ async fn branch_create_duplicate_error() {
     let author = author::find_or_create(conn, "Dev", Some("dev@x.com"))
         .await
         .expect("create author");
-    let iss = issue::create(conn, "Fix bug", author.author_id)
+    let iss = issue::create(conn, None, "Fix bug", author.author_id)
         .await
         .expect("create issue");
 
@@ -198,7 +147,7 @@ async fn branch_overwrite_via_update() {
     let author = author::find_or_create(conn, "Dev", Some("dev@x.com"))
         .await
         .expect("create author");
-    let iss = issue::create(conn, "Fix bug", author.author_id)
+    let iss = issue::create(conn, None, "Fix bug", author.author_id)
         .await
         .expect("create issue");
 
@@ -242,7 +191,7 @@ async fn issue_comments_create_and_list() {
     let author = author::find_or_create(conn, "Alice", Some("a@b.com"))
         .await
         .expect("create author");
-    let iss = issue::create(conn, "Issue", author.author_id)
+    let iss = issue::create(conn, None, "Issue", author.author_id)
         .await
         .expect("create issue");
 
@@ -270,7 +219,7 @@ async fn branch_comments_create_and_list() {
     let author = author::find_or_create(conn, "Alice", Some("a@b.com"))
         .await
         .expect("create author");
-    let iss = issue::create(conn, "Issue", author.author_id)
+    let iss = issue::create(conn, None, "Issue", author.author_id)
         .await
         .expect("create issue");
     let br = branch::create(conn, "feature", "desc", author.author_id, iss.issue_id)
@@ -326,7 +275,7 @@ async fn checkpoint_truncates_wal_and_persists_data() {
         let author = author::find_or_create(conn, "Checker", Some("c@d.com"))
             .await
             .expect("create author");
-        let created = issue::create(conn, "checkpoint issue", author.author_id)
+        let created = issue::create(conn, None, "checkpoint issue", author.author_id)
             .await
             .expect("create issue");
 

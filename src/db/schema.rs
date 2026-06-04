@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS author (
 pub const ISSUE_TABLE: &str = r#"
 CREATE TABLE IF NOT EXISTS issue (
     issue_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
+    name TEXT,
     description TEXT NOT NULL,
     author_id INTEGER NOT NULL REFERENCES author(author_id),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),

@@ -23,6 +23,8 @@ pub enum Commands {
 pub enum IssueCommands {
     Create {
         content: Option<String>,
+        #[arg(long)]
+        name: Option<String>,
     },
     Read {
         issue_number: i64,

@@ -31,9 +31,9 @@ async fn issue_create_via_arg() {
         json.get("description").and_then(|v| v.as_str()),
         Some("My first issue")
     );
-    assert_eq!(
-        json.get("name").and_then(|v| v.as_str()),
-        Some("My first issue")
+    assert!(
+        json.get("name").map(|v| v.is_null()).unwrap_or(false),
+        "name should be null when --name is not provided"
     );
     assert_eq!(
         json.get("author").and_then(|v| v.as_str()),
@@ -42,7 +42,6 @@ async fn issue_create_via_arg() {
     );
     assert!(json.get("created_at").is_some(), "should have created_at");
     assert!(json.get("updated_at").is_some(), "should have updated_at");
-    // No author_id should leak into the output.
     assert!(
         json.get("author_id").is_none(),
         "author_id must not be exposed in output"
@@ -258,5 +257,35 @@ async fn no_git_repo_fails() {
     assert!(
         stderr.contains("repository"),
         "stderr should report the missing git repository, got: {stderr}"
+    );
+}
+
+#[tokio::test]
+async fn issue_create_with_name_flag() {
+    let repo = TestRepo::new();
+    let output = dg_command()
+        .current_dir(&repo.path)
+        .arg("issue")
+        .arg("create")
+        .arg("The full description body")
+        .arg("--name")
+        .arg("Short title")
+        .output()
+        .expect("command failed to execute");
+    assert!(
+        output.status.success(),
+        "exit ok: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = std::str::from_utf8(&output.stdout).expect("valid utf8");
+    let json: serde_json::Value = serde_json::from_str(stdout).expect("valid JSON");
+    assert_eq!(
+        json.get("name").and_then(|v| v.as_str()),
+        Some("Short title")
+    );
+    assert_eq!(
+        json.get("description").and_then(|v| v.as_str()),
+        Some("The full description body")
     );
 }
