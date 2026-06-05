@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use doppelganger::{
     db::{Database, author, branch, comment, issue, models::*},
     error::Error,
-    tui::{app::*, model::*},
+    tui::{app::*, event::*, model::*},
 };
 use turso::Value;
 
@@ -391,6 +391,24 @@ fn snapshot_issue_list_render() {
 }
 
 #[test]
+fn snapshot_issue_list_empty() {
+    let app = App::new_issue_list(vec![]);
+
+    let backend = ratatui::backend::TestBackend::new(80, 24);
+    let mut terminal = ratatui::Terminal::new(backend).expect("create terminal");
+
+    terminal
+        .draw(|frame| {
+            doppelganger::tui::view::render(frame, &app);
+        })
+        .expect("draw");
+
+    let backend = terminal.backend();
+    let buffer = backend.buffer();
+    insta::assert_snapshot!("issue_list_empty", buffer_to_string(buffer));
+}
+
+#[test]
 fn snapshot_thread_render_with_markdown() {
     let thread = Thread {
         title: "test thread".into(),
@@ -548,4 +566,123 @@ async fn list_issues_on_empty_db() {
 
     let issues = issue::list_issues(conn).await.expect("list issues");
     assert!(issues.is_empty(), "empty db should return no issues");
+}
+
+// ---------------------------------------------------------------------------
+// Fingerprint tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn issue_list_fingerprint_changes_after_insert() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let author = author::find_or_create(conn, "Alice", Some("a@b.com"))
+        .await
+        .expect("create author");
+
+    let fp1 = issue_list_fingerprint(conn)
+        .await
+        .expect("fingerprint before");
+
+    issue::create(conn, None, "fp issue", author.author_id)
+        .await
+        .expect("create issue");
+
+    let fp2 = issue_list_fingerprint(conn)
+        .await
+        .expect("fingerprint after");
+    assert_ne!(fp1, fp2, "issue_list_fingerprint must change after insert");
+}
+
+#[tokio::test]
+async fn thread_fingerprint_for_issue_changes_after_comment() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let author = author::find_or_create(conn, "Alice", Some("a@b.com"))
+        .await
+        .expect("create author");
+    let iss = issue::create(conn, None, "fp issue", author.author_id)
+        .await
+        .expect("create issue");
+
+    let fp1 = thread_fingerprint(conn, Some(iss.issue_id), None)
+        .await
+        .expect("fingerprint before");
+
+    comment::create_issue_comment(conn, iss.issue_id, "new comment", author.author_id)
+        .await
+        .expect("insert comment");
+
+    let fp2 = thread_fingerprint(conn, Some(iss.issue_id), None)
+        .await
+        .expect("fingerprint after");
+    assert_ne!(
+        fp1, fp2,
+        "thread_fingerprint for issue must change after comment insert"
+    );
+}
+
+#[tokio::test]
+async fn thread_fingerprint_for_branch_changes_after_comment() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let author = author::find_or_create(conn, "Alice", Some("a@b.com"))
+        .await
+        .expect("create author");
+    let iss = issue::create(conn, None, "fp issue", author.author_id)
+        .await
+        .expect("create issue");
+    let br = branch::create(
+        conn,
+        "feature-x",
+        "branch desc",
+        author.author_id,
+        iss.issue_id,
+    )
+    .await
+    .expect("create branch");
+
+    let fp1 = thread_fingerprint(conn, None, Some(br.branch_id))
+        .await
+        .expect("fingerprint before");
+
+    comment::create_branch_comment(conn, br.branch_id, "new comment", author.author_id)
+        .await
+        .expect("insert comment");
+
+    let fp2 = thread_fingerprint(conn, None, Some(br.branch_id))
+        .await
+        .expect("fingerprint after");
+    assert_ne!(
+        fp1, fp2,
+        "thread_fingerprint for branch must change after comment insert"
+    );
+}
+
+#[tokio::test]
+async fn issue_list_fingerprint_on_empty_db_returns_value() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let fp = issue_list_fingerprint(conn)
+        .await
+        .expect("fingerprint on empty db");
+    assert!(fp == fp, "fingerprint must be a valid u64 (not panic)");
+}
+
+#[tokio::test]
+async fn thread_fingerprint_with_both_none_returns_zero() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let fp = thread_fingerprint(conn, None, None)
+        .await
+        .expect("fingerprint with both ids None");
+    assert_eq!(
+        fp, 0,
+        "thread_fingerprint must return 0 when both ids are None"
+    );
 }

@@ -36,10 +36,11 @@ impl Database {
         let db = turso::Builder::new_local(path)
             .experimental_multiprocess_wal(true)
             .build()
-            .await?;
-        let conn = db.connect()?;
+            .await
+            .map_err(classify_db_error)?;
+        let conn = db.connect().map_err(classify_db_error)?;
         let database = Self { conn };
-        database.prepare().await?;
+        database.prepare().await.map_err(classify_app_error)?;
         Ok(database)
     }
 
@@ -79,7 +80,14 @@ impl Database {
                     tokio::time::sleep(LOCK_RETRY_DELAY).await;
                 }
                 // Give up on a persistent lock rather than failing the command.
-                Err(e) if is_lock_contention(&e) => return Ok(()),
+                Err(e) if is_lock_contention(&e) => {
+                    crate::log!(
+                        "checkpoint: exhausted {} lock retries: {}",
+                        LOCK_RETRY_ATTEMPTS,
+                        e
+                    );
+                    return Ok(());
+                }
                 Err(e) => return Err(e),
             }
         }
@@ -89,8 +97,9 @@ impl Database {
         let mut rows = self
             .conn
             .query("PRAGMA wal_checkpoint(TRUNCATE)", ())
-            .await?;
-        while rows.next().await?.is_some() {}
+            .await
+            .map_err(classify_db_error)?;
+        while rows.next().await.map_err(classify_db_error)?.is_some() {}
         Ok(())
     }
 
@@ -100,9 +109,23 @@ impl Database {
 }
 
 fn is_lock_contention(err: &Error) -> bool {
-    matches!(
-        err,
-        Error::Database(turso::Error::Error(msg))
-            if msg.contains("Locking error") || msg.contains("locked by another process")
-    )
+    matches!(err, Error::LockContention)
+}
+
+fn classify_db_error(err: turso::Error) -> Error {
+    if let turso::Error::Error(ref msg) = err
+        && (msg.contains("Locking error") || msg.contains("locked by another process"))
+    {
+        return Error::LockContention;
+    }
+    Error::Database(err)
+}
+
+fn classify_app_error(err: Error) -> Error {
+    if let Error::Database(turso::Error::Error(ref msg)) = err
+        && (msg.contains("Locking error") || msg.contains("locked by another process"))
+    {
+        return Error::LockContention;
+    }
+    err
 }

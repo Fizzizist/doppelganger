@@ -44,7 +44,7 @@ pub async fn handle(
         BranchCommands::Comment { content } => {
             comment_cmd(&db, repo, author_name, author_email, content).await
         }
-        BranchCommands::Tui => Ok(()),
+        _ => unreachable!("Tui is handled by early return above"),
     };
 
     let checkpoint = db.checkpoint().await;

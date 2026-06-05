@@ -17,6 +17,9 @@ pub enum Error {
     #[error("database error: {0}")]
     Database(#[from] turso::Error),
 
+    #[error("database lock contention")]
+    LockContention,
+
     #[error("git error: {0}")]
     Git(#[from] git2::Error),
 
