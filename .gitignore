@@ -1,4 +1,5 @@
 /target
+.search-index
 .doppelganger.db
 .doppelganger.db-wal
 .doppelganger.db-shm
