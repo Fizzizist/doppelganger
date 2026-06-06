@@ -32,25 +32,11 @@ async fn run() -> doppelganger::error::Result<()> {
 
     let dispatch = match cli.command {
         Commands::Issue { command } => {
-            commands::issue::handle(
-                command,
-                &db,
-                &db_path_str,
-                &author_name,
-                author_email.as_deref(),
-            )
-            .await
+            commands::issue::handle(command, &db, &author_name, author_email.as_deref()).await
         }
         Commands::Branch { command } => {
-            commands::branch::handle(
-                command,
-                &db,
-                &db_path_str,
-                &repo,
-                &author_name,
-                author_email.as_deref(),
-            )
-            .await
+            commands::branch::handle(command, &db, &repo, &author_name, author_email.as_deref())
+                .await
         }
     };
 

@@ -10,7 +10,6 @@ use crate::{
 pub async fn handle(
     cmd: IssueCommands,
     db: &Database,
-    db_path: &str,
     author_name: &str,
     author_email: Option<&str>,
 ) -> Result<()> {
@@ -23,7 +22,7 @@ pub async fn handle(
             issue_number,
             content,
         } => comment(db, author_name, author_email, issue_number, content).await,
-        IssueCommands::Tui => tui(db, db_path).await,
+        IssueCommands::Tui => tui(db).await,
     }
 }
 
@@ -67,9 +66,9 @@ async fn comment(
     print_json(&created)
 }
 
-async fn tui(db: &Database, db_path: &str) -> Result<()> {
+async fn tui(db: &Database) -> Result<()> {
     let conn = db.conn();
     let issues = issue::list_issues(conn).await?;
-    let mut app = App::new_issue_list(issues, db_path.to_string());
+    let mut app = App::new_issue_list(issues, db);
     app.run().await
 }

@@ -16,23 +16,23 @@ pub enum Screen {
     ThreadView(thread_view::ThreadViewScreen),
 }
 
-pub struct App {
+pub struct App<'a> {
     screen: Screen,
-    db_path: String,
+    db: &'a Database,
 }
 
-impl App {
-    pub fn new_issue_list(issues: Vec<crate::db::models::Issue>, db_path: String) -> Self {
+impl<'a> App<'a> {
+    pub fn new_issue_list(issues: Vec<crate::db::models::Issue>, db: &'a Database) -> Self {
         Self {
             screen: Screen::IssueList(issue_list::IssueListScreen::new(issues)),
-            db_path,
+            db,
         }
     }
 
-    pub fn new_thread_view(thread: Thread, comments: Vec<ThreadComment>, db_path: String) -> Self {
+    pub fn new_thread_view(thread: Thread, comments: Vec<ThreadComment>, db: &'a Database) -> Self {
         Self {
             screen: Screen::ThreadView(thread_view::ThreadViewScreen::new(thread, comments)),
-            db_path,
+            db,
         }
     }
 
@@ -98,8 +98,7 @@ impl App {
     }
 
     async fn load_issue_thread(&self, issue_id: i64) -> Result<thread_view::ThreadViewScreen> {
-        let db = Database::open(&self.db_path).await?;
-        let conn = db.conn();
+        let conn = self.db.conn();
         let iss = issue::get_by_id(conn, issue_id).await?;
         let comments = comment::list_issue_comments(conn, iss.issue_id).await?;
         let thread = Thread::from(iss);
@@ -109,8 +108,7 @@ impl App {
     }
 
     async fn load_issues(&self) -> Result<Vec<crate::db::models::Issue>> {
-        let db = Database::open(&self.db_path).await?;
-        let conn = db.conn();
+        let conn = self.db.conn();
         issue::list_issues(conn).await
     }
 }
