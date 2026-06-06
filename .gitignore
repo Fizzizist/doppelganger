@@ -2,3 +2,5 @@
 .doppelganger.db
 .doppelganger.db-wal
 .doppelganger.db-shm
+.search-index
+.doppelganger.db-tshm
