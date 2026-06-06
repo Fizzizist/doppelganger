@@ -9,6 +9,7 @@ pub mod schema;
 use crate::error::Result;
 
 pub struct Database {
+    _db: turso::Database,
     conn: turso::Connection,
 }
 
@@ -16,7 +17,10 @@ impl Database {
     pub async fn open(path: &str) -> Result<Self> {
         let db = turso::Builder::new_local(path).build().await?;
         let conn = db.connect()?;
-        let database = Self { conn };
+        let database = Self {
+            _db: db,
+            conn,
+        };
         database.prepare().await?;
         Ok(database)
     }
@@ -24,7 +28,10 @@ impl Database {
     pub async fn open_in_memory() -> Result<Self> {
         let db = turso::Builder::new_local(":memory:").build().await?;
         let conn = db.connect()?;
-        let database = Self { conn };
+        let database = Self {
+            _db: db,
+            conn,
+        };
         database.prepare().await?;
         Ok(database)
     }
