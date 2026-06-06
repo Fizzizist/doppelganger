@@ -15,12 +15,20 @@ pub struct Database {
 
 impl Database {
     pub async fn open(path: &str) -> Result<Self> {
+        // Disable file locking to avoid conflicts with other processes
+        // (e.g., a shell running dg commands while the TUI is open).
+        // This is safe because doppelganger is a single-process,
+        // single-connection application.
+        // SAFETY: set_var is unsafe in edition 2024. We set this env var
+        // early in the process before any concurrent access, and it only
+        // affects the turso library's file locking behavior.
+        unsafe {
+            std::env::set_var("LIMBO_DISABLE_FILE_LOCK", "1");
+        }
+
         let db = turso::Builder::new_local(path).build().await?;
         let conn = db.connect()?;
-        let database = Self {
-            _db: db,
-            conn,
-        };
+        let database = Self { _db: db, conn };
         database.prepare().await?;
         Ok(database)
     }
@@ -28,10 +36,7 @@ impl Database {
     pub async fn open_in_memory() -> Result<Self> {
         let db = turso::Builder::new_local(":memory:").build().await?;
         let conn = db.connect()?;
-        let database = Self {
-            _db: db,
-            conn,
-        };
+        let database = Self { _db: db, conn };
         database.prepare().await?;
         Ok(database)
     }
