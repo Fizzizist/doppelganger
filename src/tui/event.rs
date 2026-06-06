@@ -17,11 +17,11 @@ use crate::tui::view;
 pub async fn run(
     terminal: &mut ratatui::Terminal<CrosstermBackend<Stdout>>,
     app: &mut App,
-    db: &Database,
+    db_path: &str,
 ) -> Result<()> {
     render(terminal, app)?;
 
-    let mut prev_fingerprint = compute_fingerprint(db, app).await.ok();
+    let mut prev_fingerprint = compute_fingerprint(db_path, app).await.ok();
 
     let mut event_stream = EventStream::new();
     let mut poll_interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
@@ -38,15 +38,15 @@ pub async fn run(
                 {
                     app.handle_key(key);
                     if let Some(action) = app.take_action() {
-                        handle_action(db, app, action).await;
+                        handle_action(db_path, app, action).await;
                     }
                     render(terminal, app)?;
                 }
             }
             _ = poll_interval.tick() => {
-                let curr_fingerprint = compute_fingerprint(db, app).await.ok();
+                let curr_fingerprint = compute_fingerprint(db_path, app).await.ok();
                 if curr_fingerprint != prev_fingerprint {
-                    if let Err(e) = reload_data(db, app).await {
+                    if let Err(e) = reload_data(db_path, app).await {
                         log!("TUI reload error: {}", e);
                     } else {
                         render(terminal, app)?;
@@ -63,9 +63,9 @@ fn render(terminal: &mut ratatui::Terminal<CrosstermBackend<Stdout>>, app: &App)
     Ok(())
 }
 
-async fn handle_action(db: &Database, app: &mut App, action: Action) {
+async fn handle_action(db_path: &str, app: &mut App, action: Action) {
     match action {
-        Action::OpenIssueThread(issue_id) => match load_issue_thread(db, issue_id).await {
+        Action::OpenIssueThread(issue_id) => match load_issue_thread(db_path, issue_id).await {
             Ok(thread) => {
                 app.has_issue_list = true;
                 app.transition_to_thread(thread);
@@ -83,7 +83,10 @@ async fn handle_action(db: &Database, app: &mut App, action: Action) {
     }
 }
 
-pub async fn compute_fingerprint(db: &Database, app: &App) -> Result<u64> {
+pub async fn compute_fingerprint(db_path: &str, app: &App) -> Result<u64> {
+    // Open a short-lived connection per poll so the TUI never holds the WAL
+    // lock between ticks, allowing other processes to write concurrently.
+    let db = Database::open(db_path).await?;
     let conn = db.conn();
     match &app.screen {
         Screen::IssueList => issue_list_fingerprint(conn).await,
@@ -182,23 +185,26 @@ pub async fn thread_fingerprint(
     Ok(hasher.finish())
 }
 
-async fn load_issue_thread(db: &Database, issue_id: i64) -> Result<Thread> {
+async fn load_issue_thread(db_path: &str, issue_id: i64) -> Result<Thread> {
+    let db = Database::open(db_path).await?;
     let conn = db.conn();
     let issue = issue::get_by_id(conn, issue_id).await?;
     let comments = comment::list_issue_comments(conn, issue_id).await?;
     Ok(Thread::from(IssueWithComments { issue, comments }))
 }
 
-async fn load_branch_thread(db: &Database, branch_id: i64) -> Result<Thread> {
+async fn load_branch_thread(db_path: &str, branch_id: i64) -> Result<Thread> {
+    let db = Database::open(db_path).await?;
     let conn = db.conn();
     let branch = crate::db::branch::get_by_id(conn, branch_id).await?;
     let comments = comment::list_branch_comments(conn, branch_id).await?;
     Ok(Thread::from(BranchWithComments { branch, comments }))
 }
 
-async fn reload_data(db: &Database, app: &mut App) -> Result<()> {
+async fn reload_data(db_path: &str, app: &mut App) -> Result<()> {
     match &app.screen {
         Screen::IssueList => {
+            let db = Database::open(db_path).await?;
             let issues = issue::list_issues(db.conn()).await?;
             app.set_issues(issues);
         }
@@ -206,10 +212,10 @@ async fn reload_data(db: &Database, app: &mut App) -> Result<()> {
             let issue_id = thread.issue_id;
             let branch_id = thread.branch_id;
             if let Some(issue_id) = issue_id {
-                let new_thread = load_issue_thread(db, issue_id).await?;
+                let new_thread = load_issue_thread(db_path, issue_id).await?;
                 app.replace_thread(new_thread);
             } else if let Some(branch_id) = branch_id {
-                let new_thread = load_branch_thread(db, branch_id).await?;
+                let new_thread = load_branch_thread(db_path, branch_id).await?;
                 app.replace_thread(new_thread);
             }
         }
