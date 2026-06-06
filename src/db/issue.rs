@@ -1,4 +1,6 @@
 use crate::error::{Error, Result};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use turso::Value;
 
 use super::{
@@ -75,4 +77,21 @@ pub async fn list_issues(conn: &turso::Connection) -> Result<Vec<Issue>> {
         issues.push(row_to_issue(&row)?);
     }
     Ok(issues)
+}
+
+pub async fn fingerprint(conn: &turso::Connection) -> Result<u64> {
+    let mut rows = conn
+        .query("SELECT COUNT(issue_id), MAX(updated_at) FROM issue", ())
+        .await?;
+
+    match rows.next().await? {
+        Some(row) => {
+            let count: i64 = row.get(0).unwrap_or(0);
+            let max_updated: Option<String> = row.get(1).ok();
+            let mut hasher = DefaultHasher::new();
+            (count, max_updated).hash(&mut hasher);
+            Ok(hasher.finish())
+        }
+        None => Ok(0),
+    }
 }

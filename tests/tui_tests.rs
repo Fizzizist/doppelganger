@@ -2,7 +2,7 @@ mod common;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use doppelganger::{
-    db::{Database, author, branch, comment, fingerprint, issue, models::*},
+    db::{Database, author, branch, comment, issue, models::*},
     error::Error,
     tui::{app::*, event::*, model::*},
 };
@@ -581,17 +581,13 @@ async fn issue_list_fingerprint_changes_after_insert() {
         .await
         .expect("create author");
 
-    let fp1 = fingerprint::issue_list_fingerprint(conn)
-        .await
-        .expect("fingerprint before");
+    let fp1 = issue::fingerprint(conn).await.expect("fingerprint before");
 
     issue::create(conn, None, "fp issue", author.author_id)
         .await
         .expect("create issue");
 
-    let fp2 = fingerprint::issue_list_fingerprint(conn)
-        .await
-        .expect("fingerprint after");
+    let fp2 = issue::fingerprint(conn).await.expect("fingerprint after");
     assert_ne!(fp1, fp2, "issue_list_fingerprint must change after insert");
 }
 
@@ -607,7 +603,7 @@ async fn thread_fingerprint_for_issue_changes_after_comment() {
         .await
         .expect("create issue");
 
-    let fp1 = fingerprint::thread_fingerprint(conn, Some(iss.issue_id), None)
+    let fp1 = comment::issue_thread_fingerprint(conn, iss.issue_id)
         .await
         .expect("fingerprint before");
 
@@ -615,7 +611,7 @@ async fn thread_fingerprint_for_issue_changes_after_comment() {
         .await
         .expect("insert comment");
 
-    let fp2 = fingerprint::thread_fingerprint(conn, Some(iss.issue_id), None)
+    let fp2 = comment::issue_thread_fingerprint(conn, iss.issue_id)
         .await
         .expect("fingerprint after");
     assert_ne!(
@@ -645,7 +641,7 @@ async fn thread_fingerprint_for_branch_changes_after_comment() {
     .await
     .expect("create branch");
 
-    let fp1 = fingerprint::thread_fingerprint(conn, None, Some(br.branch_id))
+    let fp1 = comment::branch_thread_fingerprint(conn, br.branch_id)
         .await
         .expect("fingerprint before");
 
@@ -653,7 +649,7 @@ async fn thread_fingerprint_for_branch_changes_after_comment() {
         .await
         .expect("insert comment");
 
-    let fp2 = fingerprint::thread_fingerprint(conn, None, Some(br.branch_id))
+    let fp2 = comment::branch_thread_fingerprint(conn, br.branch_id)
         .await
         .expect("fingerprint after");
     assert_ne!(
@@ -667,22 +663,8 @@ async fn issue_list_fingerprint_on_empty_db_returns_value() {
     let db = Database::open_in_memory().await.expect("open in-memory db");
     let conn = db.conn();
 
-    let fp = fingerprint::issue_list_fingerprint(conn)
+    let fp = issue::fingerprint(conn)
         .await
         .expect("fingerprint on empty db");
     assert!(fp == fp, "fingerprint must be a valid u64 (not panic)");
-}
-
-#[tokio::test]
-async fn thread_fingerprint_with_both_none_returns_zero() {
-    let db = Database::open_in_memory().await.expect("open in-memory db");
-    let conn = db.conn();
-
-    let fp = fingerprint::thread_fingerprint(conn, None, None)
-        .await
-        .expect("fingerprint with both ids None");
-    assert_eq!(
-        fp, 0,
-        "thread_fingerprint must return 0 when both ids are None"
-    );
 }

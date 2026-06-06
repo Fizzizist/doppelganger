@@ -1,7 +1,6 @@
 pub mod author;
 pub mod branch;
 pub mod comment;
-pub mod fingerprint;
 pub mod issue;
 pub mod models;
 pub mod row;

@@ -1,4 +1,6 @@
 use crate::error::{Error, Result};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use turso::Value;
 
 use super::{
@@ -144,4 +146,62 @@ fn row_to_branch_comment(row: &turso::Row) -> Result<BranchComment> {
         created_at: extract_text(row, 4)?,
         updated_at: extract_text(row, 5)?,
     })
+}
+
+pub async fn issue_thread_fingerprint(conn: &turso::Connection, issue_id: i64) -> Result<u64> {
+    let mut rows = conn
+        .query(
+            "SELECT COUNT(issue_comment_id), MAX(updated_at) FROM issue_comment WHERE issue_id = ?1",
+            turso::params::Params::Positional(vec![Value::Integer(issue_id)]),
+        )
+        .await?;
+    let (comment_count, max_updated_at) = match rows.next().await? {
+        Some(row) => {
+            let count: i64 = row.get(0).unwrap_or(0);
+            let max_updated: Option<String> = row.get(1).ok();
+            (count, max_updated)
+        }
+        None => return Ok(0),
+    };
+
+    let mut rows = conn
+        .query(
+            "SELECT updated_at FROM issue WHERE issue_id = ?1",
+            turso::params::Params::Positional(vec![Value::Integer(issue_id)]),
+        )
+        .await?;
+    let parent_updated = rows.next().await?.and_then(|r| r.get::<String>(0).ok());
+
+    let mut hasher = DefaultHasher::new();
+    (comment_count, max_updated_at, parent_updated).hash(&mut hasher);
+    Ok(hasher.finish())
+}
+
+pub async fn branch_thread_fingerprint(conn: &turso::Connection, branch_id: i64) -> Result<u64> {
+    let mut rows = conn
+        .query(
+            "SELECT COUNT(branch_comment_id), MAX(updated_at) FROM branch_comment WHERE branch_id = ?1",
+            turso::params::Params::Positional(vec![Value::Integer(branch_id)]),
+        )
+        .await?;
+    let (comment_count, max_updated_at) = match rows.next().await? {
+        Some(row) => {
+            let count: i64 = row.get(0).unwrap_or(0);
+            let max_updated: Option<String> = row.get(1).ok();
+            (count, max_updated)
+        }
+        None => return Ok(0),
+    };
+
+    let mut rows = conn
+        .query(
+            "SELECT updated_at FROM branch WHERE branch_id = ?1",
+            turso::params::Params::Positional(vec![Value::Integer(branch_id)]),
+        )
+        .await?;
+    let parent_updated = rows.next().await?.and_then(|r| r.get::<String>(0).ok());
+
+    let mut hasher = DefaultHasher::new();
+    (comment_count, max_updated_at, parent_updated).hash(&mut hasher);
+    Ok(hasher.finish())
 }

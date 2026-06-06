@@ -5,7 +5,7 @@ use futures::StreamExt;
 use ratatui::backend::CrosstermBackend;
 
 use crate::db::models::{BranchWithComments, IssueWithComments};
-use crate::db::{Database, comment, fingerprint, issue};
+use crate::db::{Database, comment, issue};
 use crate::error::Result;
 use crate::log;
 use crate::tui::app::{Action, App, Screen};
@@ -85,12 +85,12 @@ pub async fn compute_fingerprint(db_path: &str, app: &App) -> Result<u64> {
     let db = Database::open(db_path).await?;
     let conn = db.conn();
     match &app.screen {
-        Screen::IssueList => fingerprint::issue_list_fingerprint(conn).await,
+        Screen::IssueList => issue::fingerprint(conn).await,
         Screen::Thread(thread) => {
             if let Some(issue_id) = thread.issue_id {
-                fingerprint::thread_fingerprint(conn, Some(issue_id), None).await
+                comment::issue_thread_fingerprint(conn, issue_id).await
             } else if let Some(branch_id) = thread.branch_id {
-                fingerprint::thread_fingerprint(conn, None, Some(branch_id)).await
+                comment::branch_thread_fingerprint(conn, branch_id).await
             } else {
                 Ok(0)
             }
