@@ -301,3 +301,31 @@ async fn checkpoint_truncates_wal_and_persists_data() {
         .expect("issue should persist after checkpoint and reopen");
     assert_eq!(fetched.description, "checkpoint issue");
 }
+
+#[tokio::test]
+async fn list_issues_empty() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+    let issues = issue::list_issues(conn).await.expect("list issues");
+    assert!(issues.is_empty(), "empty db should return no issues");
+}
+
+#[tokio::test]
+async fn list_issues_returns_all() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let author = author::find_or_create(conn, "Alice", Some("a@b.com"))
+        .await
+        .expect("create author");
+
+    issue::create(conn, None, "First", author.author_id)
+        .await
+        .expect("create first issue");
+    issue::create(conn, None, "Second", author.author_id)
+        .await
+        .expect("create second issue");
+
+    let issues = issue::list_issues(conn).await.expect("list issues");
+    assert_eq!(issues.len(), 2, "should have two issues");
+}

@@ -5,11 +5,13 @@ use crate::{
     git::current_branch,
     input::resolve_content,
     output::print_json,
+    tui::{Thread, ThreadComment, app::App},
 };
 
 pub async fn handle(
     cmd: BranchCommands,
     db: &Database,
+    db_path: &str,
     repo: &git2::Repository,
     author_name: &str,
     author_email: Option<&str>,
@@ -35,6 +37,7 @@ pub async fn handle(
         BranchCommands::Comment { content } => {
             comment_cmd(db, repo, author_name, author_email, content).await
         }
+        BranchCommands::Tui => tui(db, db_path, repo).await,
     }
 }
 
@@ -110,4 +113,16 @@ async fn comment_cmd(
     let created =
         comment::create_branch_comment(conn, br.branch_id, &text, author.author_id).await?;
     print_json(&created)
+}
+
+async fn tui(db: &Database, db_path: &str, repo: &git2::Repository) -> Result<()> {
+    let branch_name = current_branch(repo)?;
+    let conn = db.conn();
+    let br = branch::get_by_name(conn, &branch_name).await?;
+    let comments = comment::list_branch_comments(conn, br.branch_id).await?;
+    let thread = Thread::from(br);
+    let thread_comments: Vec<ThreadComment> =
+        comments.into_iter().map(ThreadComment::from).collect();
+    let mut app = App::new_thread_view(thread, thread_comments, db_path.to_string());
+    app.run().await
 }
