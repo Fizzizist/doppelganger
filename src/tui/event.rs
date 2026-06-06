@@ -1,5 +1,3 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::io::Stdout;
 
 use crossterm::event::{Event, EventStream, KeyEventKind};
@@ -7,7 +5,7 @@ use futures::StreamExt;
 use ratatui::backend::CrosstermBackend;
 
 use crate::db::models::{BranchWithComments, IssueWithComments};
-use crate::db::{Database, comment, issue};
+use crate::db::{Database, comment, fingerprint, issue};
 use crate::error::Result;
 use crate::log;
 use crate::tui::app::{Action, App, Screen};
@@ -84,105 +82,20 @@ async fn handle_action(db_path: &str, app: &mut App, action: Action) {
 }
 
 pub async fn compute_fingerprint(db_path: &str, app: &App) -> Result<u64> {
-    // Open a short-lived connection per poll so the TUI never holds the WAL
-    // lock between ticks, allowing other processes to write concurrently.
     let db = Database::open(db_path).await?;
     let conn = db.conn();
     match &app.screen {
-        Screen::IssueList => issue_list_fingerprint(conn).await,
+        Screen::IssueList => fingerprint::issue_list_fingerprint(conn).await,
         Screen::Thread(thread) => {
             if let Some(issue_id) = thread.issue_id {
-                thread_fingerprint(conn, Some(issue_id), None).await
+                fingerprint::thread_fingerprint(conn, Some(issue_id), None).await
             } else if let Some(branch_id) = thread.branch_id {
-                thread_fingerprint(conn, None, Some(branch_id)).await
+                fingerprint::thread_fingerprint(conn, None, Some(branch_id)).await
             } else {
                 Ok(0)
             }
         }
     }
-}
-
-pub async fn issue_list_fingerprint(conn: &turso::Connection) -> Result<u64> {
-    let mut rows = conn
-        .query("SELECT COUNT(issue_id), MAX(updated_at) FROM issue", ())
-        .await?;
-
-    match rows.next().await? {
-        Some(row) => {
-            let count: i64 = row.get(0).unwrap_or(0);
-            let max_updated: Option<String> = row.get(1).ok();
-            let mut hasher = DefaultHasher::new();
-            (count, max_updated).hash(&mut hasher);
-            Ok(hasher.finish())
-        }
-        None => Ok(0),
-    }
-}
-
-pub async fn thread_fingerprint(
-    conn: &turso::Connection,
-    issue_id: Option<i64>,
-    branch_id: Option<i64>,
-) -> Result<u64> {
-    let (comment_count, max_updated_at) = if let Some(id) = issue_id {
-        let mut rows = conn
-            .query(
-                "SELECT COUNT(issue_comment_id), MAX(updated_at) FROM issue_comment WHERE issue_id = ?1",
-                turso::params::Params::Positional(vec![turso::Value::Integer(id)]),
-            )
-            .await?;
-        match rows.next().await? {
-            Some(row) => {
-                let count: i64 = row.get(0).unwrap_or(0);
-                let max_updated: Option<String> = row.get(1).ok();
-                (count, max_updated)
-            }
-            None => return Ok(0),
-        }
-    } else if let Some(id) = branch_id {
-        let mut rows = conn
-            .query(
-                "SELECT COUNT(branch_comment_id), MAX(updated_at) FROM branch_comment WHERE branch_id = ?1",
-                turso::params::Params::Positional(vec![turso::Value::Integer(id)]),
-            )
-            .await?;
-        match rows.next().await? {
-            Some(row) => {
-                let count: i64 = row.get(0).unwrap_or(0);
-                let max_updated: Option<String> = row.get(1).ok();
-                (count, max_updated)
-            }
-            None => return Ok(0),
-        }
-    } else {
-        return Ok(0);
-    };
-
-    let parent_updated = if let Some(id) = issue_id {
-        let mut rows = conn
-            .query(
-                "SELECT updated_at FROM issue WHERE issue_id = ?1",
-                turso::params::Params::Positional(vec![turso::Value::Integer(id)]),
-            )
-            .await?;
-        let row = rows.next().await?;
-        row.and_then(|r| r.get::<String>(0).ok())
-    } else if let Some(id) = branch_id {
-        let mut rows = conn
-            .query(
-                "SELECT updated_at FROM branch WHERE branch_id = ?1",
-                turso::params::Params::Positional(vec![turso::Value::Integer(id)]),
-            )
-            .await?;
-        let row = rows.next().await?;
-        row.and_then(|r| r.get::<String>(0).ok())
-    } else {
-        None
-    };
-
-    let mut hasher = DefaultHasher::new();
-    (comment_count, max_updated_at, parent_updated).hash(&mut hasher);
-    Ok(hasher.finish())
 }
 
 async fn load_issue_thread(db_path: &str, issue_id: i64) -> Result<Thread> {

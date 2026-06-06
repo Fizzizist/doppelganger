@@ -3,11 +3,6 @@ use ratatui::text::{Line, Span, Text};
 use ratatui_crossterm::FromCrossterm;
 use termimad::{CompoundStyle, FmtLine, FmtText, MadSkin};
 
-/// Render markdown source to a ratatui `Text`, wrapping to the given width.
-///
-/// Uses termimad's `FmtText` for width-aware line wrapping, table layout, and
-/// code-block justification, then converts the styled intermediate representation
-/// into ratatui `Line`/`Span` primitives.
 pub fn render_markdown(src: &str, width: u16) -> Text<'static> {
     let skin = MadSkin::default();
     render_markdown_with_skin(src, &skin, width)
