@@ -1,0 +1,19 @@
+---
+source: tests/tui_tests.rs
+expression: output
+---
+ Long Thread
+Commenter0 — 2025-01-01 00:00:00
+Comment number 0
+
+Commenter1 — 2025-01-02 00:00:00
+Comment number 1
+
+Commenter2 — 2025-01-03 00:00:00
+Comment number 2
+
+Commenter3 — 2025-01-04 00:00:00
+Comment number 3
+
+Commenter4 — 2025-01-05 00:00:00
+Comment number 4

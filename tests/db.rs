@@ -5,7 +5,6 @@ use doppelganger::db::{Database, author, branch, comment, issue};
 #[tokio::test]
 async fn migrate_is_idempotent() {
     let db = Database::open_in_memory().await.expect("open in-memory db");
-    // migrate() is already called during open_in_memory(), call it again
     db.migrate().await.expect("second migrate should succeed");
 }
 
@@ -244,8 +243,6 @@ async fn branch_comments_create_and_list() {
 
 #[tokio::test]
 async fn fk_branch_with_invalid_issue_is_rejected() {
-    // Database::open enables `PRAGMA foreign_keys = ON`, so inserting a branch
-    // that references a nonexistent issue must be rejected by the DB layer.
     let db = Database::open_in_memory().await.expect("open in-memory db");
     let conn = db.conn();
 
@@ -253,12 +250,61 @@ async fn fk_branch_with_invalid_issue_is_rejected() {
         .await
         .expect("create author");
 
-    // issue_id 99999 does not exist — FK enforcement should reject the insert.
     let result = branch::create(conn, "feature", "desc", author.author_id, 99999).await;
     assert!(
         result.is_err(),
         "foreign key enforcement must reject a branch referencing a missing issue"
     );
+}
+
+#[tokio::test]
+async fn busy_timeout_is_set() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let mut rows = conn
+        .query("PRAGMA busy_timeout", ())
+        .await
+        .expect("query busy_timeout");
+
+    let row = rows.next().await.expect("get row").expect("row present");
+    let timeout = doppelganger::db::row::extract_int(&row, 0).expect("extract timeout");
+    assert_eq!(timeout, 5000, "busy_timeout should be 5000ms");
+}
+
+#[tokio::test]
+async fn issue_list_ordered_by_updated_at_desc() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let author = author::find_or_create(conn, "Author", Some("a@b.com"))
+        .await
+        .expect("create author");
+
+    let first = issue::create(conn, None, "oldest", author.author_id)
+        .await
+        .expect("create first issue");
+
+    let second = issue::create(conn, None, "newest", author.author_id)
+        .await
+        .expect("create second issue");
+
+    let issues = issue::list(conn).await.expect("list issues");
+    assert_eq!(issues.len(), 2);
+    assert_eq!(
+        issues[0].issue_id, second.issue_id,
+        "newest issue first by ID when timestamps are equal"
+    );
+    assert_eq!(issues[1].issue_id, first.issue_id, "oldest issue second");
+}
+
+#[tokio::test]
+async fn issue_list_empty() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let issues = issue::list(conn).await.expect("list issues");
+    assert!(issues.is_empty());
 }
 
 #[tokio::test]
@@ -279,7 +325,6 @@ async fn checkpoint_truncates_wal_and_persists_data() {
             .await
             .expect("create issue");
 
-        // The WAL should hold the just-written, uncheckpointed data.
         let wal_before = std::fs::metadata(&wal_path).map(|m| m.len()).unwrap_or(0);
         assert!(wal_before > 0, "WAL should be non-empty before checkpoint");
 
@@ -294,7 +339,6 @@ async fn checkpoint_truncates_wal_and_persists_data() {
         created.issue_id
     };
 
-    // Reopen the database and confirm the data persisted past checkpoint + close.
     let db = Database::open(db_path_str).await.expect("reopen local db");
     let fetched = issue::get_by_id(db.conn(), issue_id)
         .await

@@ -47,7 +47,6 @@ impl TestRepo {
     pub fn new_no_git() -> Self {
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().to_path_buf();
-        // No git init — just a plain directory
         TestRepo { dir, path }
     }
 }

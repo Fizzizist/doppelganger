@@ -21,6 +21,9 @@ pub async fn handle(
             issue_number,
             content,
         } => comment(db, author_name, author_email, issue_number, content).await,
+        IssueCommands::Tui => {
+            unreachable!("TUI is handled directly in main.rs")
+        }
     }
 }
 

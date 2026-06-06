@@ -34,6 +34,9 @@ pub enum Error {
 
     #[error("issue not found: #{0}")]
     IssueNotFound(i64),
+
+    #[error("TUI error: {0}")]
+    Tui(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -35,6 +35,9 @@ pub async fn handle(
         BranchCommands::Comment { content } => {
             comment_cmd(db, repo, author_name, author_email, content).await
         }
+        BranchCommands::Tui => {
+            unreachable!("TUI is handled directly in main.rs")
+        }
     }
 }
 

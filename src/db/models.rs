@@ -5,7 +5,7 @@ pub struct Author {
     pub email: Option<String>,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Issue {
     pub issue_id: i64,
     pub name: Option<String>,

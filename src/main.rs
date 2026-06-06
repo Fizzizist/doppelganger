@@ -30,19 +30,33 @@ async fn run() -> doppelganger::error::Result<()> {
     let db = Database::open(db_path_str).await?;
 
     let dispatch = match cli.command {
-        Commands::Issue { command } => {
-            commands::issue::handle(command, &db, &author_name, author_email.as_deref()).await
-        }
-        Commands::Branch { command } => {
-            commands::branch::handle(command, &db, &repo, &author_name, author_email.as_deref())
-                .await
-        }
+        Commands::Issue { command } => match command {
+            doppelganger::cli::IssueCommands::Tui => {
+                doppelganger::logging::init(&root.join(".doppelganger"));
+                doppelganger::tui::run_tui(&db).await?;
+                db.checkpoint().await?;
+                return Ok(());
+            }
+            other => {
+                commands::issue::handle(other, &db, &author_name, author_email.as_deref()).await
+            }
+        },
+        Commands::Branch { command } => match command {
+            doppelganger::cli::BranchCommands::Tui => {
+                doppelganger::logging::init(&root.join(".doppelganger"));
+                let branch_name = doppelganger::git::current_branch(&repo)?;
+                doppelganger::tui::run_branch_tui(&db, &branch_name).await?;
+                db.checkpoint().await?;
+                return Ok(());
+            }
+            other => {
+                commands::branch::handle(other, &db, &repo, &author_name, author_email.as_deref())
+                    .await
+            }
+        },
     };
 
-    // Checkpoint regardless of dispatch outcome so the WAL does not grow
-    // unbounded across repeated failures. Surface a dispatch error first.
-    let checkpoint = db.checkpoint().await;
     dispatch?;
-    checkpoint?;
+    db.checkpoint().await?;
     Ok(())
 }

@@ -31,6 +31,7 @@ impl Database {
 
     async fn prepare(&self) -> Result<()> {
         self.conn.execute("PRAGMA foreign_keys = ON", ()).await?;
+        self.conn.execute("PRAGMA busy_timeout = 5000", ()).await?;
         self.migrate().await
     }
 
