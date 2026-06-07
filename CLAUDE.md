@@ -30,3 +30,15 @@ These are _strict_ policies that must be followed by all engineers and developer
 ## Project
 
 This project is in its infancy. See `./docs/initial-design.md` for the high level initial design plan.
+
+## Architecture
+
+### Database Concurrency
+
+Multiple doppelganger processes can access the same `.doppelganger.db` file concurrently (e.g. a TUI process and a CLI agent). This is enabled by:
+
+1. **`LIMBO_DISABLE_FILE_LOCK=1`** — disables turso's exclusive `flock` on the database file at open time, which would otherwise prevent concurrent access.
+2. **`experimental_multiprocess_wal(true)`** — enables turso's shared WAL coordination, which uses `fcntl` byte-range locks for cross-process coordination instead of exclusive file locks.
+3. **`Connection::busy_timeout(Duration::from_secs(5))`** — retries on SQLite-level busy conditions for up to 5 seconds.
+
+Do not remove any of these without understanding the concurrency implications.

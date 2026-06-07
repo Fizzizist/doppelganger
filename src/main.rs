@@ -9,6 +9,16 @@ use doppelganger::{
 
 #[tokio::main]
 async fn main() {
+    // Disable turso's exclusive file-level flock so that concurrent processes
+    // (e.g. a TUI reader and a CLI writer) can both open the same database.
+    // The multiprocess WAL feature provides cross-process coordination via
+    // fcntl byte-range locks, making the flock unnecessary and harmful.
+    // SAFETY: This is called before any other threads or turso operations exist,
+    // so there is no concurrent access to the environment.
+    unsafe {
+        std::env::set_var("LIMBO_DISABLE_FILE_LOCK", "1");
+    }
+
     if let Err(e) = run().await {
         eprintln!("error: {e}");
         std::process::exit(1);
