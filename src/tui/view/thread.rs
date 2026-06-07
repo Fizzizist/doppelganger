@@ -6,6 +6,17 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
+fn markdown_theme() -> the_other_tui_markdown::Theme {
+    the_other_tui_markdown::Theme {
+        code_block: Style::new().fg(Color::Gray),
+        code_block_lang: Style::new()
+            .fg(Color::DarkGray)
+            .add_modifier(Modifier::ITALIC),
+        inline_code: Style::new().fg(Color::Gray),
+        ..the_other_tui_markdown::Theme::default()
+    }
+}
+
 pub fn render(f: &mut ratatui::Frame, app: &App) {
     let thread = match &app.thread {
         Some(t) => t,
@@ -37,9 +48,11 @@ pub fn render(f: &mut ratatui::Frame, app: &App) {
     .block(Block::default().borders(Borders::BOTTOM));
     f.render_widget(header, chunks[0]);
 
+    let theme = markdown_theme();
     let mut body_lines: Vec<Line> = Vec::new();
 
-    let desc_text = the_other_tui_markdown::into_text(&thread.description);
+    let desc_text =
+        the_other_tui_markdown::into_text_with_theme(&thread.description, theme.clone());
     for line in desc_text.lines {
         body_lines.push(line);
     }
@@ -54,7 +67,8 @@ pub fn render(f: &mut ratatui::Frame, app: &App) {
                 Style::default().fg(Color::DarkGray),
             ),
         ]));
-        let comment_text = the_other_tui_markdown::into_text(&comment.content);
+        let comment_text =
+            the_other_tui_markdown::into_text_with_theme(&comment.content, theme.clone());
         for line in comment_text.lines {
             body_lines.push(line);
         }
