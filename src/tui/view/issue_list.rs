@@ -55,7 +55,7 @@ pub fn render(f: &mut ratatui::Frame, app: &App) {
     let widths = [
         Constraint::Length(5),
         Constraint::Percentage(40),
-        Constraint::Length(14),
+        Constraint::Percentage(20),
         Constraint::Length(19),
     ];
 
