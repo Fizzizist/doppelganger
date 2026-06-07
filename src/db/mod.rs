@@ -14,7 +14,10 @@ pub struct Database {
 
 impl Database {
     pub async fn open(path: &str) -> Result<Self> {
-        let db = turso::Builder::new_local(path).build().await?;
+        let db = turso::Builder::new_local(path)
+            .experimental_multiprocess_wal(true)
+            .build()
+            .await?;
         let conn = db.connect()?;
         let database = Self { conn };
         database.prepare().await?;
@@ -31,7 +34,7 @@ impl Database {
 
     async fn prepare(&self) -> Result<()> {
         self.conn.execute("PRAGMA foreign_keys = ON", ()).await?;
-        self.conn.execute("PRAGMA busy_timeout = 5000", ()).await?;
+        self.conn.busy_timeout(std::time::Duration::from_secs(5))?;
         self.migrate().await
     }
 
