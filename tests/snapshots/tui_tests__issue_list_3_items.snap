@@ -3,10 +3,10 @@ source: tests/tui_tests.rs
 expression: output
 ---
 ┌Issues────────────────────────────────────────────────────────────────────────┐
-│#1 Fix login bug  Alice  2025-01-02 12:00:00                                  │
-│#2 Add dark mode  Bob  2025-01-02 12:00:00                                    │
-│#3 A very long description that exceeds the normal display widt...  Charlie  2│
-│                                                                              │
+│   #     Name                                 Author       Updated            │
+│>> 1     Fix login bug                        Alice        2025-01-02 12:00:00│
+│   2     Add dark mode                        Bob          2025-01-02 12:00:00│
+│   3     untitled                             Charlie      2025-01-02 12:00:00│
 │                                                                              │
 │                                                                              │
 │                                                                              │

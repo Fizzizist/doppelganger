@@ -3,16 +3,13 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Paragraph, Row, Table, TableState},
 };
 
-fn truncate_to_60(s: &str) -> String {
-    let chars: Vec<char> = s.chars().collect();
-    if chars.len() <= 60 {
-        s.to_string()
-    } else {
-        let truncated: String = chars.into_iter().take(60).collect();
-        format!("{truncated}...")
+fn display_name(issue: &crate::db::models::Issue) -> &str {
+    match issue.name.as_deref() {
+        Some(n) if !n.is_empty() => n,
+        _ => "untitled",
     }
 }
 
@@ -22,44 +19,58 @@ pub fn render(f: &mut ratatui::Frame, app: &App) {
         .constraints([Constraint::Min(0), Constraint::Length(1)])
         .split(f.area());
 
-    let items: Vec<ListItem> = app
+    let header = Row::new(vec![
+        Line::from(Span::styled(
+            "#",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "Name",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "Author",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "Updated",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+    ])
+    .style(Style::default().fg(Color::Cyan));
+
+    let rows: Vec<Row> = app
         .issues
         .iter()
         .map(|issue| {
-            let title = match issue.name.as_deref() {
-                Some(n) => n,
-                None => issue.description.as_str(),
-            };
-            let display_title = truncate_to_60(title);
-
-            let line = Line::from(vec![
-                Span::styled(
-                    format!("#{} ", issue.issue_id),
-                    Style::default().fg(Color::Cyan),
-                ),
-                Span::raw(display_title),
-                Span::raw("  "),
-                Span::styled(issue.author.clone(), Style::default().fg(Color::Yellow)),
-                Span::raw("  "),
-                Span::styled(
-                    issue.updated_at.clone(),
-                    Style::default().fg(Color::DarkGray),
-                ),
-            ]);
-            ListItem::new(line)
+            Row::new(vec![
+                Line::from(format!("{}", issue.issue_id)),
+                Line::from(display_name(issue)),
+                Line::from(issue.author.clone()),
+                Line::from(issue.updated_at.clone()),
+            ])
         })
         .collect();
 
-    let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title("Issues"))
-        .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+    let widths = [
+        Constraint::Length(5),
+        Constraint::Min(10),
+        Constraint::Length(12),
+        Constraint::Length(19),
+    ];
 
-    let mut state = ListState::default();
+    let table = Table::new(rows, widths)
+        .header(header)
+        .block(Block::default().borders(Borders::ALL).title("Issues"))
+        .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
+        .highlight_symbol(">> ");
+
+    let mut state = TableState::default();
     if !app.issues.is_empty() {
         state.select(Some(app.selected_issue));
     }
 
-    f.render_stateful_widget(list, chunks[0], &mut state);
+    f.render_stateful_widget(table, chunks[0], &mut state);
 
     let help = Paragraph::new("j/k: navigate  Enter/l: select  q: quit")
         .style(Style::default().fg(Color::DarkGray));
