@@ -1,5 +1,6 @@
 pub mod app;
 pub mod event;
+pub mod highlight;
 pub mod model;
 pub mod terminal;
 pub mod view;

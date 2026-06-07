@@ -1,4 +1,5 @@
 use crate::tui::app::App;
+use crate::tui::highlight::build_renderer;
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
@@ -48,11 +49,10 @@ pub fn render(f: &mut ratatui::Frame, app: &App) {
     .block(Block::default().borders(Borders::BOTTOM));
     f.render_widget(header, chunks[0]);
 
-    let theme = markdown_theme();
+    let renderer = build_renderer(markdown_theme());
     let mut body_lines: Vec<Line> = Vec::new();
 
-    let desc_text =
-        the_other_tui_markdown::into_text_with_theme(&thread.description, theme.clone());
+    let desc_text = the_other_tui_markdown::into_text_with_renderer(&thread.description, &renderer);
     for line in desc_text.lines {
         body_lines.push(line);
     }
@@ -68,7 +68,7 @@ pub fn render(f: &mut ratatui::Frame, app: &App) {
             ),
         ]));
         let comment_text =
-            the_other_tui_markdown::into_text_with_theme(&comment.content, theme.clone());
+            the_other_tui_markdown::into_text_with_renderer(&comment.content, &renderer);
         for line in comment_text.lines {
             body_lines.push(line);
         }
