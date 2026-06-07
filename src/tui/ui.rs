@@ -32,12 +32,19 @@ fn draw_issue_list(f: &mut Frame, app: &App) {
         })
         .collect();
 
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::NONE)
-            .title(" Issues ")
-            .title_style(Style::default().add_modifier(Modifier::BOLD)),
-    );
+    let list = List::new(items)
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ")
+        .block(
+            Block::default()
+                .borders(Borders::NONE)
+                .title(" Issues ")
+                .title_style(Style::default().add_modifier(Modifier::BOLD)),
+        );
 
     let mut state = ListState::default();
     if !app.issues.is_empty() {

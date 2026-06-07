@@ -3,4 +3,4 @@ source: tests/tui_tests.rs
 expression: output
 ---
  Issues
-  #1 First issue                              2025-06-01 12:00:00
+▶   #1 First issue                              2025-06-01 12:00:00
