@@ -21,6 +21,9 @@ pub async fn handle(
             issue_number,
             content,
         } => comment(db, author_name, author_email, issue_number, content).await,
+        IssueCommands::Tui => Err(crate::error::Error::Validation(
+            "issue tui is handled before DB open".to_string(),
+        )),
     }
 }
 

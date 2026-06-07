@@ -1,6 +1,6 @@
 use clap::Parser;
 use doppelganger::{
-    cli::{Cli, Commands},
+    cli::{BranchCommands, Cli, Commands, IssueCommands},
     commands,
     db::Database,
     error::Error,
@@ -27,6 +27,20 @@ async fn run() -> doppelganger::error::Result<()> {
         .to_str()
         .ok_or_else(|| Error::Validation("db path is not valid UTF-8".to_string()))?;
 
+    match cli.command {
+        Commands::Issue {
+            command: IssueCommands::Tui,
+        } => {
+            return doppelganger::tui::run_issue_tui(db_path_str).await;
+        }
+        Commands::Branch {
+            command: BranchCommands::Tui,
+        } => {
+            return doppelganger::tui::run_branch_tui(db_path_str, &repo).await;
+        }
+        _ => {}
+    }
+
     let db = Database::open(db_path_str).await?;
 
     let dispatch = match cli.command {
@@ -39,8 +53,6 @@ async fn run() -> doppelganger::error::Result<()> {
         }
     };
 
-    // Checkpoint regardless of dispatch outcome so the WAL does not grow
-    // unbounded across repeated failures. Surface a dispatch error first.
     let checkpoint = db.checkpoint().await;
     dispatch?;
     checkpoint?;

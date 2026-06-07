@@ -35,6 +35,9 @@ pub async fn handle(
         BranchCommands::Comment { content } => {
             comment_cmd(db, repo, author_name, author_email, content).await
         }
+        BranchCommands::Tui => Err(crate::error::Error::Validation(
+            "branch tui is handled before DB open".to_string(),
+        )),
     }
 }
 

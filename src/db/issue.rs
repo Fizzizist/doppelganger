@@ -48,6 +48,24 @@ pub async fn get_by_id(conn: &turso::Connection, issue_id: i64) -> Result<Issue>
     }
 }
 
+pub async fn list(conn: &turso::Connection) -> Result<Vec<Issue>> {
+    let mut rows = conn
+        .query(
+            "SELECT issue.issue_id, issue.name, issue.description, author.name, \
+             issue.created_at, issue.updated_at \
+             FROM issue JOIN author ON issue.author_id = author.author_id \
+             ORDER BY issue.updated_at DESC, issue.issue_id DESC",
+            (),
+        )
+        .await?;
+
+    let mut issues = Vec::new();
+    while let Some(row) = rows.next().await? {
+        issues.push(row_to_issue(&row)?);
+    }
+    Ok(issues)
+}
+
 fn row_to_issue(row: &turso::Row) -> Result<Issue> {
     Ok(Issue {
         issue_id: extract_int(row, 0)?,
