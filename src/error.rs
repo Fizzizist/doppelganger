@@ -35,6 +35,9 @@ pub enum Error {
     #[error("issue not found: #{0}")]
     IssueNotFound(i64),
 
+    #[error("database lock contention")]
+    LockContention,
+
     #[error("TUI error: {0}")]
     Tui(String),
 }

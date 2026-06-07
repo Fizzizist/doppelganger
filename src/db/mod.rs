@@ -6,7 +6,12 @@ pub mod models;
 pub mod row;
 pub mod schema;
 
-use crate::error::Result;
+use std::time::Duration;
+
+use crate::error::{Error, Result};
+
+const LOCK_RETRY_ATTEMPTS: u32 = 200;
+const LOCK_RETRY_DELAY: Duration = Duration::from_millis(25);
 
 pub struct Database {
     conn: turso::Connection,
@@ -14,13 +19,28 @@ pub struct Database {
 
 impl Database {
     pub async fn open(path: &str) -> Result<Self> {
+        let mut attempt = 0u32;
+        loop {
+            match Self::try_open(path).await {
+                Ok(db) => return Ok(db),
+                Err(Error::LockContention) if attempt < LOCK_RETRY_ATTEMPTS => {
+                    attempt += 1;
+                    tokio::time::sleep(LOCK_RETRY_DELAY).await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    async fn try_open(path: &str) -> Result<Self> {
         let db = turso::Builder::new_local(path)
             .experimental_multiprocess_wal(true)
             .build()
-            .await?;
-        let conn = db.connect()?;
+            .await
+            .map_err(classify_db_error)?;
+        let conn = db.connect().map_err(classify_db_error)?;
         let database = Self { conn };
-        database.prepare().await?;
+        database.prepare().await.map_err(classify_app_error)?;
         Ok(database)
     }
 
@@ -34,7 +54,7 @@ impl Database {
 
     async fn prepare(&self) -> Result<()> {
         self.conn.execute("PRAGMA foreign_keys = ON", ()).await?;
-        self.conn.busy_timeout(std::time::Duration::from_secs(5))?;
+        self.conn.busy_timeout(Duration::from_secs(5))?;
         self.migrate().await
     }
 
@@ -48,15 +68,55 @@ impl Database {
     }
 
     pub async fn checkpoint(&self) -> Result<()> {
+        let mut attempt = 0u32;
+        loop {
+            match self.try_checkpoint().await {
+                Ok(()) => return Ok(()),
+                Err(Error::LockContention) if attempt < LOCK_RETRY_ATTEMPTS => {
+                    attempt += 1;
+                    tokio::time::sleep(LOCK_RETRY_DELAY).await;
+                }
+                Err(Error::LockContention) => {
+                    tracing::warn!(
+                        "checkpoint: exhausted {} lock retries, giving up",
+                        LOCK_RETRY_ATTEMPTS
+                    );
+                    return Ok(());
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    async fn try_checkpoint(&self) -> Result<()> {
         let mut rows = self
             .conn
             .query("PRAGMA wal_checkpoint(TRUNCATE)", ())
-            .await?;
-        while rows.next().await?.is_some() {}
+            .await
+            .map_err(classify_db_error)?;
+        while rows.next().await.map_err(classify_db_error)?.is_some() {}
         Ok(())
     }
 
     pub fn conn(&self) -> &turso::Connection {
         &self.conn
     }
+}
+
+fn classify_db_error(err: turso::Error) -> Error {
+    if let turso::Error::Error(ref msg) = err
+        && (msg.contains("Locking error") || msg.contains("locked by another process"))
+    {
+        return Error::LockContention;
+    }
+    Error::Database(err)
+}
+
+fn classify_app_error(err: Error) -> Error {
+    if let Error::Database(turso::Error::Error(ref msg)) = err
+        && (msg.contains("Locking error") || msg.contains("locked by another process"))
+    {
+        return Error::LockContention;
+    }
+    err
 }

@@ -31,24 +31,28 @@ impl Drop for TuiGuard {
     }
 }
 
-pub async fn run_tui(db: &Database) -> Result<()> {
+pub async fn run_tui(db_path: &str) -> Result<()> {
+    let db = Database::open(db_path).await?;
+    let issues = issue::list(db.conn()).await?;
+    drop(db);
+
     let guard = TuiGuard::init().map_err(|e| crate::error::Error::Tui(e.to_string()))?;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal =
         Terminal::new(backend).map_err(|e| crate::error::Error::Tui(e.to_string()))?;
 
-    let issues = issue::list(db.conn()).await?;
     let mut app = App::new(issues);
-
-    let result = event_loop(&mut terminal, db, &mut app).await;
+    let result = event_loop(&mut terminal, db_path, &mut app).await;
     drop(guard);
     result
 }
 
-pub async fn run_branch_tui(db: &Database, branch_name: &str) -> Result<()> {
+pub async fn run_branch_tui(db_path: &str, branch_name: &str) -> Result<()> {
+    let db = Database::open(db_path).await?;
     let br = branch::get_by_name(db.conn(), branch_name).await?;
     let comments = comment::list_branch_comments(db.conn(), br.branch_id).await?;
     let thread = Thread::from((&br, comments));
+    drop(db);
 
     let guard = TuiGuard::init().map_err(|e| crate::error::Error::Tui(e.to_string()))?;
     let backend = CrosstermBackend::new(io::stdout());
@@ -58,14 +62,14 @@ pub async fn run_branch_tui(db: &Database, branch_name: &str) -> Result<()> {
     let mut app = App::new(Vec::new());
     app.enter_thread(thread);
 
-    let result = branch_event_loop(&mut terminal, db, &mut app, branch_name).await;
+    let result = branch_event_loop(&mut terminal, db_path, &mut app, branch_name).await;
     drop(guard);
     result
 }
 
 async fn event_loop<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
-    db: &Database,
+    db_path: &str,
     app: &mut App,
 ) -> Result<()> {
     let tick_interval = std::time::Duration::from_millis(250);
@@ -98,10 +102,12 @@ async fn event_loop<B: ratatui::backend::Backend>(
                 KeyCode::Char('l') | KeyCode::Enter
                     if app.screen == Screen::IssueList && !app.issues.is_empty() =>
                 {
-                    let selected_issue = &app.issues[app.selected];
-                    let comments =
-                        comment::list_issue_comments(db.conn(), selected_issue.issue_id).await?;
-                    let thread = Thread::from((selected_issue, comments));
+                    let issue_id = app.issues[app.selected].issue_id;
+                    let db = Database::open(db_path).await?;
+                    let selected_issue = issue::get_by_id(db.conn(), issue_id).await?;
+                    let comments = comment::list_issue_comments(db.conn(), issue_id).await?;
+                    drop(db);
+                    let thread = Thread::from((&selected_issue, comments));
                     app.enter_thread(thread);
                 }
                 KeyCode::Char('u')
@@ -120,18 +126,19 @@ async fn event_loop<B: ratatui::backend::Backend>(
             },
             AppEvent::Tick => {
                 if app.screen == Screen::IssueList {
-                    let _ = poll_issue_list(db, app).await;
+                    let _ = poll_issue_list(db_path, app).await;
                 } else if app.screen == Screen::Thread {
-                    let _ = poll_thread_update(db, app).await;
+                    let _ = poll_thread_update(db_path, app).await;
                 }
             }
         }
     }
 }
 
-async fn poll_issue_list(db: &Database, app: &mut App) -> Result<()> {
+async fn poll_issue_list(db_path: &str, app: &mut App) -> Result<()> {
     use crate::db::row::extract_optional_text;
 
+    let db = Database::open(db_path).await?;
     let conn = db.conn();
     let mut rows = conn.query("SELECT MAX(updated_at) FROM issue", ()).await?;
 
@@ -147,28 +154,29 @@ async fn poll_issue_list(db: &Database, app: &mut App) -> Result<()> {
     Ok(())
 }
 
-async fn poll_thread_update(db: &Database, app: &mut App) -> Result<()> {
-    let (updated_thread, max_ts) = {
-        let issue = match app.issues.get(app.selected) {
-            Some(i) => i,
-            None => return Ok(()),
-        };
-
-        let comments = comment::list_issue_comments(db.conn(), issue.issue_id).await?;
-
-        let max_ts = comments
-            .iter()
-            .map(|c| c.updated_at.as_str())
-            .max()
-            .map(String::from);
-
-        if max_ts.as_ref() == app.last_poll_timestamp.as_ref() {
-            return Ok(());
-        }
-
-        (Thread::from((issue, comments)), max_ts)
+async fn poll_thread_update(db_path: &str, app: &mut App) -> Result<()> {
+    let issue_id = match app.issues.get(app.selected) {
+        Some(i) => i.issue_id,
+        None => return Ok(()),
     };
 
+    let db = Database::open(db_path).await?;
+    let conn = db.conn();
+    let comments = comment::list_issue_comments(conn, issue_id).await?;
+
+    let max_ts = comments
+        .iter()
+        .map(|c| c.updated_at.as_str())
+        .max()
+        .map(String::from);
+
+    if max_ts.as_ref() == app.last_poll_timestamp.as_ref() {
+        return Ok(());
+    }
+
+    let selected_issue = issue::get_by_id(conn, issue_id).await?;
+    drop(db);
+    let updated_thread = Thread::from((&selected_issue, comments));
     app.thread = Some(updated_thread);
     app.last_poll_timestamp = max_ts;
     Ok(())
@@ -176,7 +184,7 @@ async fn poll_thread_update(db: &Database, app: &mut App) -> Result<()> {
 
 async fn branch_event_loop<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
-    db: &Database,
+    db_path: &str,
     app: &mut App,
     branch_name: &str,
 ) -> Result<()> {
@@ -203,6 +211,10 @@ async fn branch_event_loop<B: ratatui::backend::Backend>(
                 _ => {}
             },
             AppEvent::Tick => {
+                let db = match Database::open(db_path).await {
+                    Ok(db) => db,
+                    Err(_) => continue,
+                };
                 let br = match branch::get_by_name(db.conn(), branch_name).await {
                     Ok(b) => b,
                     Err(_) => continue,

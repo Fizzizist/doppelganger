@@ -9,16 +9,6 @@ use doppelganger::{
 
 #[tokio::main]
 async fn main() {
-    // Disable turso's exclusive file-level flock so that concurrent processes
-    // (e.g. a TUI reader and a CLI writer) can both open the same database.
-    // The multiprocess WAL feature provides cross-process coordination via
-    // fcntl byte-range locks, making the flock unnecessary and harmful.
-    // SAFETY: This is called before any other threads or turso operations exist,
-    // so there is no concurrent access to the environment.
-    unsafe {
-        std::env::set_var("LIMBO_DISABLE_FILE_LOCK", "1");
-    }
-
     if let Err(e) = run().await {
         eprintln!("error: {e}");
         std::process::exit(1);
@@ -37,36 +27,46 @@ async fn run() -> doppelganger::error::Result<()> {
         .to_str()
         .ok_or_else(|| Error::Validation("db path is not valid UTF-8".to_string()))?;
 
-    let db = Database::open(db_path_str).await?;
-
-    let dispatch = match cli.command {
+    match cli.command {
         Commands::Issue { command } => match command {
             doppelganger::cli::IssueCommands::Tui => {
                 doppelganger::logging::init(&root.join(".doppelganger"));
-                doppelganger::tui::run_tui(&db).await?;
+                doppelganger::tui::run_tui(db_path_str).await?;
+                let db = Database::open(db_path_str).await?;
                 db.checkpoint().await?;
-                return Ok(());
+                Ok(())
             }
             other => {
-                commands::issue::handle(other, &db, &author_name, author_email.as_deref()).await
+                let db = Database::open(db_path_str).await?;
+                let result =
+                    commands::issue::handle(other, &db, &author_name, author_email.as_deref())
+                        .await;
+                db.checkpoint().await?;
+                result
             }
         },
         Commands::Branch { command } => match command {
             doppelganger::cli::BranchCommands::Tui => {
                 doppelganger::logging::init(&root.join(".doppelganger"));
                 let branch_name = doppelganger::git::current_branch(&repo)?;
-                doppelganger::tui::run_branch_tui(&db, &branch_name).await?;
+                doppelganger::tui::run_branch_tui(db_path_str, &branch_name).await?;
+                let db = Database::open(db_path_str).await?;
                 db.checkpoint().await?;
-                return Ok(());
+                Ok(())
             }
             other => {
-                commands::branch::handle(other, &db, &repo, &author_name, author_email.as_deref())
-                    .await
+                let db = Database::open(db_path_str).await?;
+                let result = commands::branch::handle(
+                    other,
+                    &db,
+                    &repo,
+                    &author_name,
+                    author_email.as_deref(),
+                )
+                .await;
+                db.checkpoint().await?;
+                result
             }
         },
-    };
-
-    dispatch?;
-    db.checkpoint().await?;
-    Ok(())
+    }
 }
