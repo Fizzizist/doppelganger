@@ -8,118 +8,134 @@ pub mod view;
 pub use app::App;
 pub use model::{Thread, ThreadComment};
 
-use crate::db::Database;
+use crossterm::event::{Event as CrosstermEvent, EventStream, KeyCode, KeyModifiers};
+use futures_util::StreamExt;
+use tokio::time::{MissedTickBehavior, interval_at};
+
+use crate::error::{Error, Result};
 use crate::tui::app::Screen;
-use crossterm::event::{EventStream, KeyCode};
 
-pub async fn run_issue_tui(db_path: &str) -> crate::error::Result<()> {
+const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
+enum TuiMode {
+    Issue,
+    Branch { branch_name: String },
+}
+
+pub async fn run_issue_tui(db_path: &str) -> Result<()> {
     crate::logging::init();
-
-    let mut guard = terminal::TuiGuard::init()?;
     let mut app = App::new();
-    let mut events = EventStream::new();
+    if let Err(e) = event::load_issues(db_path, &mut app).await {
+        tracing::warn!("initial issue load failed: {e}");
+    }
+    let mut guard = terminal::TuiGuard::init()?;
+    run_loop(db_path, TuiMode::Issue, &mut guard, &mut app).await
+}
 
-    event::load_issues(db_path, &mut app).await?;
+pub async fn run_branch_tui(db_path: &str, repo: &git2::Repository) -> Result<()> {
+    crate::logging::init();
+    let branch_name = crate::git::current_branch(repo)?;
+    let mut app = App::new();
+    // Pre-flight: load branch data before entering raw terminal mode so errors surface cleanly.
+    event::load_branch_thread(db_path, &branch_name, &mut app).await?;
+    app.screen = Screen::Thread;
+    let mut guard = terminal::TuiGuard::init()?;
+    run_loop(
+        db_path,
+        TuiMode::Branch { branch_name },
+        &mut guard,
+        &mut app,
+    )
+    .await
+}
+
+async fn run_loop(
+    db_path: &str,
+    mode: TuiMode,
+    guard: &mut terminal::TuiGuard,
+    app: &mut App,
+) -> Result<()> {
+    let mut events = EventStream::new();
+    let mut tick = interval_at(tokio::time::Instant::now() + POLL_INTERVAL, POLL_INTERVAL);
+    tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+    draw(guard, app)?;
 
     loop {
-        {
-            let term = guard.terminal();
-            term.draw(|f| match app.screen {
-                Screen::IssueList => view::issue_list::render(f, &app),
-                Screen::Thread => view::thread::render(f, &app),
-            })
-            .map_err(|e| crate::error::Error::Tui(e.to_string()))?;
-        }
-
-        let evt = event::next_event(&mut events).await?;
-        match evt {
-            event::AppEvent::Key(code, modifiers) => {
-                if event::handle_key(&mut app, code, modifiers) {
-                    break;
-                }
-                if matches!(app.screen, Screen::Thread)
-                    && app.thread.is_none()
-                    && let Err(e) = event::load_issue_thread(db_path, &mut app).await
-                {
-                    tracing::warn!("failed to load thread: {e}");
+        tokio::select! {
+            _ = tick.tick() => {
+                if poll_db(db_path, &mode, app).await {
+                    draw(guard, app)?;
                 }
             }
-            event::AppEvent::Tick => match app.screen {
-                Screen::IssueList => {
-                    if let Err(e) = event::load_issues(db_path, &mut app).await {
-                        tracing::warn!("failed to reload issues: {e}");
+            maybe_event = events.next() => {
+                match maybe_event {
+                    Some(Ok(CrosstermEvent::Key(key))) => {
+                        if dispatch_key(app, &mode, key.code, key.modifiers) {
+                            break;
+                        }
+                        if matches!(app.screen, Screen::Thread) && app.thread.is_none()
+                            && let Err(e) = event::load_issue_thread(db_path, app).await
+                        {
+                            tracing::warn!("failed to load thread: {e}");
+                        }
+                        draw(guard, app)?;
                     }
+                    Some(Ok(CrosstermEvent::Resize(_, _))) => draw(guard, app)?,
+                    Some(Ok(_)) => {}
+                    Some(Err(e)) => return Err(Error::Tui(e.to_string())),
+                    None => return Err(Error::Tui("event stream ended".to_string())),
                 }
-                Screen::Thread => {
-                    if let Err(e) = event::load_issue_thread(db_path, &mut app).await {
-                        tracing::warn!("failed to reload thread: {e}");
-                    }
-                }
-            },
+            }
         }
     }
 
     Ok(())
 }
 
-pub async fn run_branch_tui(db_path: &str, repo: &git2::Repository) -> crate::error::Result<()> {
-    crate::logging::init();
+fn draw(guard: &mut terminal::TuiGuard, app: &App) -> Result<()> {
+    guard
+        .terminal()
+        .draw(|f| match app.screen {
+            Screen::IssueList => view::issue_list::render(f, app),
+            Screen::Thread => view::thread::render(f, app),
+        })
+        .map_err(|e| Error::Tui(e.to_string()))?;
+    Ok(())
+}
 
-    let branch_name = crate::git::current_branch(repo)?;
-
-    let db = Database::open(db_path).await?;
-    let br = crate::db::branch::get_by_name(db.conn(), &branch_name).await?;
-    let comments = crate::db::comment::list_branch_comments(db.conn(), br.branch_id).await?;
-    drop(db);
-
-    let thread = Thread::from(&crate::db::models::BranchWithComments {
-        branch: br,
-        comments,
-    });
-
-    let mut guard = terminal::TuiGuard::init()?;
-    let mut app = App::new();
-    app.screen = Screen::Thread;
-    app.thread = Some(thread);
-
-    let mut events = EventStream::new();
-
-    loop {
-        {
-            let term = guard.terminal();
-            term.draw(|f| view::thread::render(f, &app))
-                .map_err(|e| crate::error::Error::Tui(e.to_string()))?;
-        }
-
-        let evt = event::next_event(&mut events).await?;
-        match evt {
-            event::AppEvent::Key(code, modifiers) => match code {
-                KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('h') => break,
-                KeyCode::Char('j') | KeyCode::Down => {
-                    app.thread_scroll = app.thread_scroll.saturating_add(1);
-                }
-                KeyCode::Char('k') | KeyCode::Up => {
-                    app.thread_scroll = app.thread_scroll.saturating_sub(1);
-                }
-                KeyCode::Char('u')
-                    if modifiers.contains(crossterm::event::KeyModifiers::CONTROL) =>
-                {
-                    app.thread_scroll = app.thread_scroll.saturating_sub(20);
-                }
-                KeyCode::Char('d')
-                    if modifiers.contains(crossterm::event::KeyModifiers::CONTROL) =>
-                {
-                    app.thread_scroll = app.thread_scroll.saturating_add(20);
-                }
-                _ => {}
-            },
-            event::AppEvent::Tick => {
-                if let Err(e) = event::load_branch_thread(db_path, &branch_name, &mut app).await {
-                    tracing::warn!("failed to reload branch thread: {e}");
-                }
+fn dispatch_key(app: &mut App, mode: &TuiMode, code: KeyCode, modifiers: KeyModifiers) -> bool {
+    match mode {
+        TuiMode::Issue => event::handle_key(app, code, modifiers),
+        TuiMode::Branch { .. } => {
+            match code {
+                KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('h') => return true,
+                _ => event::handle_thread_scroll(app, code, modifiers),
             }
+            false
         }
     }
+}
 
-    Ok(())
+async fn poll_db(db_path: &str, mode: &TuiMode, app: &mut App) -> bool {
+    match mode {
+        TuiMode::Issue => match app.screen {
+            Screen::IssueList => event::load_issues(db_path, app).await.unwrap_or_else(|e| {
+                tracing::warn!("DB poll failed: {e}");
+                false
+            }),
+            Screen::Thread => event::load_issue_thread(db_path, app)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::warn!("DB poll failed: {e}");
+                    false
+                }),
+        },
+        TuiMode::Branch { branch_name } => event::load_branch_thread(db_path, branch_name, app)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("DB poll failed: {e}");
+                false
+            }),
+    }
 }

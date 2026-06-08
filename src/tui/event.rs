@@ -1,41 +1,8 @@
-use crossterm::event::{Event as CrosstermEvent, EventStream, KeyCode, KeyModifiers};
-use futures_util::StreamExt;
+use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::db::{Database, comment, issue};
 use crate::tui::app::{App, Screen};
 use crate::tui::model::Thread;
-
-const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
-
-pub enum AppEvent {
-    Key(KeyCode, KeyModifiers),
-    Tick,
-}
-
-pub async fn next_event(events: &mut EventStream) -> crate::error::Result<AppEvent> {
-    loop {
-        let event: Option<()> = tokio::select! {
-            maybe_event = events.next() => {
-                match maybe_event {
-                    Some(Ok(CrosstermEvent::Key(key_event))) => {
-                        return Ok(AppEvent::Key(key_event.code, key_event.modifiers));
-                    }
-                    Some(Ok(CrosstermEvent::Resize(_, _))) => return Ok(AppEvent::Tick),
-                    Some(Ok(_)) => None::<()>,
-                    Some(Err(e)) => return Err(crate::error::Error::Tui(e.to_string())),
-                    None => return Err(crate::error::Error::Tui("event stream ended".to_string())),
-                }
-            }
-            _ = tokio::time::sleep(POLL_INTERVAL) => {
-                return Ok(AppEvent::Tick);
-            }
-        };
-
-        if event.is_none() {
-            continue;
-        }
-    }
-}
 
 pub fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> bool {
     match app.screen {
@@ -73,23 +40,28 @@ fn handle_thread_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> b
             app.back();
             false
         }
+        _ => {
+            handle_thread_scroll(app, code, modifiers);
+            false
+        }
+    }
+}
+
+pub fn handle_thread_scroll(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
+    match (code, modifiers) {
         (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
             app.thread_scroll = app.thread_scroll.saturating_add(1);
-            false
         }
         (KeyCode::Char('k'), _) | (KeyCode::Up, _) => {
             app.thread_scroll = app.thread_scroll.saturating_sub(1);
-            false
         }
         (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
             app.thread_scroll = app.thread_scroll.saturating_sub(20);
-            false
         }
         (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
             app.thread_scroll = app.thread_scroll.saturating_add(20);
-            false
         }
-        _ => false,
+        _ => {}
     }
 }
 
