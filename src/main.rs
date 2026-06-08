@@ -30,31 +30,33 @@ async fn run() -> doppelganger::error::Result<()> {
     match cli.command {
         Commands::Issue {
             command: IssueCommands::Tui,
-        } => {
-            return doppelganger::tui::run_issue_tui(db_path_str).await;
-        }
+        } => doppelganger::tui::run_issue_tui(db_path_str).await,
         Commands::Branch {
             command: BranchCommands::Tui,
-        } => {
-            return doppelganger::tui::run_branch_tui(db_path_str, &repo).await;
-        }
-        _ => {}
-    }
-
-    let db = Database::open(db_path_str).await?;
-
-    let dispatch = match cli.command {
+        } => doppelganger::tui::run_branch_tui(db_path_str, &repo).await,
         Commands::Issue { command } => {
-            commands::issue::handle(command, &db, &author_name, author_email.as_deref()).await
+            let db = Database::open(db_path_str).await?;
+            let dispatch =
+                commands::issue::handle(command, &db, &author_name, author_email.as_deref()).await;
+            let checkpoint = db.checkpoint().await;
+            dispatch?;
+            checkpoint?;
+            Ok(())
         }
         Commands::Branch { command } => {
-            commands::branch::handle(command, &db, &repo, &author_name, author_email.as_deref())
-                .await
+            let db = Database::open(db_path_str).await?;
+            let dispatch = commands::branch::handle(
+                command,
+                &db,
+                &repo,
+                &author_name,
+                author_email.as_deref(),
+            )
+            .await;
+            let checkpoint = db.checkpoint().await;
+            dispatch?;
+            checkpoint?;
+            Ok(())
         }
-    };
-
-    let checkpoint = db.checkpoint().await;
-    dispatch?;
-    checkpoint?;
-    Ok(())
+    }
 }
