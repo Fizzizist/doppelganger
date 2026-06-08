@@ -28,35 +28,40 @@ async fn run() -> doppelganger::error::Result<()> {
         .ok_or_else(|| Error::Validation("db path is not valid UTF-8".to_string()))?;
 
     match cli.command {
-        Commands::Issue {
-            command: IssueCommands::Tui,
-        } => doppelganger::tui::run_issue_tui(db_path_str).await,
-        Commands::Branch {
-            command: BranchCommands::Tui,
-        } => doppelganger::tui::run_branch_tui(db_path_str, &repo).await,
-        Commands::Issue { command } => {
-            let db = Database::open(db_path_str).await?;
-            let dispatch =
-                commands::issue::handle(command, &db, &author_name, author_email.as_deref()).await;
-            let checkpoint = db.checkpoint().await;
-            dispatch?;
-            checkpoint?;
-            Ok(())
-        }
-        Commands::Branch { command } => {
-            let db = Database::open(db_path_str).await?;
-            let dispatch = commands::branch::handle(
-                command,
-                &db,
-                &repo,
-                &author_name,
-                author_email.as_deref(),
-            )
-            .await;
-            let checkpoint = db.checkpoint().await;
-            dispatch?;
-            checkpoint?;
-            Ok(())
-        }
+        Commands::Issue { command } => match command {
+            IssueCommands::Tui => doppelganger::tui::run_issue_tui(db_path_str).await,
+            other_command => {
+                let db = Database::open(db_path_str).await?;
+                let dispatch = commands::issue::handle(
+                    other_command,
+                    &db,
+                    &author_name,
+                    author_email.as_deref(),
+                )
+                .await;
+                let checkpoint = db.checkpoint().await;
+                dispatch?;
+                checkpoint?;
+                Ok(())
+            }
+        },
+        Commands::Branch { command } => match command {
+            BranchCommands::Tui => doppelganger::tui::run_branch_tui(db_path_str, &repo).await,
+            other_command => {
+                let db = Database::open(db_path_str).await?;
+                let dispatch = commands::branch::handle(
+                    other_command,
+                    &db,
+                    &repo,
+                    &author_name,
+                    author_email.as_deref(),
+                )
+                .await;
+                let checkpoint = db.checkpoint().await;
+                dispatch?;
+                checkpoint?;
+                Ok(())
+            }
+        },
     }
 }
