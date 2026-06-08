@@ -10,12 +10,14 @@ pub use model::{Thread, ThreadComment};
 
 use crate::db::Database;
 use crate::tui::app::Screen;
+use crossterm::event::{EventStream, KeyCode};
 
 pub async fn run_issue_tui(db_path: &str) -> crate::error::Result<()> {
     crate::logging::init();
 
     let mut guard = terminal::TuiGuard::init()?;
     let mut app = App::new();
+    let mut events = EventStream::new();
 
     event::load_issues(db_path, &mut app).await?;
 
@@ -29,7 +31,7 @@ pub async fn run_issue_tui(db_path: &str) -> crate::error::Result<()> {
             .map_err(|e| crate::error::Error::Tui(e.to_string()))?;
         }
 
-        let evt = event::next_event().await?;
+        let evt = event::next_event(&mut events).await?;
         match evt {
             event::AppEvent::Key(code, modifiers) => {
                 if event::handle_key(&mut app, code, modifiers) {
@@ -80,6 +82,8 @@ pub async fn run_branch_tui(db_path: &str, repo: &git2::Repository) -> crate::er
     app.screen = Screen::Thread;
     app.thread = Some(thread);
 
+    let mut events = EventStream::new();
+
     loop {
         {
             let term = guard.terminal();
@@ -87,16 +91,28 @@ pub async fn run_branch_tui(db_path: &str, repo: &git2::Repository) -> crate::er
                 .map_err(|e| crate::error::Error::Tui(e.to_string()))?;
         }
 
-        let evt = event::next_event().await?;
+        let evt = event::next_event(&mut events).await?;
         match evt {
-            event::AppEvent::Key(code, modifiers) => {
-                if event::handle_key(&mut app, code, modifiers) {
-                    break;
+            event::AppEvent::Key(code, modifiers) => match code {
+                KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('h') => break,
+                KeyCode::Char('j') | KeyCode::Down => {
+                    app.thread_scroll = app.thread_scroll.saturating_add(1);
                 }
-                if matches!(app.screen, Screen::IssueList) {
-                    break;
+                KeyCode::Char('k') | KeyCode::Up => {
+                    app.thread_scroll = app.thread_scroll.saturating_sub(1);
                 }
-            }
+                KeyCode::Char('u')
+                    if modifiers.contains(crossterm::event::KeyModifiers::CONTROL) =>
+                {
+                    app.thread_scroll = app.thread_scroll.saturating_sub(20);
+                }
+                KeyCode::Char('d')
+                    if modifiers.contains(crossterm::event::KeyModifiers::CONTROL) =>
+                {
+                    app.thread_scroll = app.thread_scroll.saturating_add(20);
+                }
+                _ => {}
+            },
             event::AppEvent::Tick => {
                 if let Err(e) = event::load_branch_thread(db_path, &branch_name, &mut app).await {
                     tracing::warn!("failed to reload branch thread: {e}");

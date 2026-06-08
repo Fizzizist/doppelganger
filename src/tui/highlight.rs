@@ -79,7 +79,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn highlight_rust_code_produces_colored_spans() {
+    fn highlight_rust_code_produces_distinct_keyword_style() {
         let lines = highlight_code_block("rust", "fn main() {}\n");
         assert!(!lines.is_empty(), "should produce at least one line");
         let first_line = &lines[0];
@@ -87,17 +87,42 @@ mod tests {
             !first_line.spans.is_empty(),
             "rust code should have colored spans"
         );
+
+        let fn_span = first_line
+            .spans
+            .iter()
+            .find(|s| s.content.starts_with("fn"));
+        assert!(fn_span.is_some(), "should find a span containing 'fn'");
+        let fn_style = fn_span.expect("checked above").style;
+        let default_style = ratatui::style::Style::default();
+        assert!(
+            fn_style.fg != default_style.fg,
+            "'fn' keyword should have a non-default foreground color (syntax highlighting active)"
+        );
     }
 
     #[test]
     fn highlight_unknown_lang_falls_back_to_plain_text() {
         let lines = highlight_code_block("xyzzy-nonexistent", "hello world\n");
         assert!(!lines.is_empty());
+        let first_line = &lines[0];
+        assert!(
+            first_line.spans.iter().any(|s| s.content.contains("hello")),
+            "plain text fallback should contain the original text"
+        );
     }
 
     #[test]
     fn highlight_empty_lang_uses_plain_text() {
         let lines = highlight_code_block("", "just plain text\n");
         assert!(!lines.is_empty());
+        let first_line = &lines[0];
+        assert!(
+            first_line
+                .spans
+                .iter()
+                .any(|s| s.content.contains("plain text")),
+            "plain text should contain the original text"
+        );
     }
 }

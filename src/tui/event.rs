@@ -12,10 +12,8 @@ pub enum AppEvent {
     Tick,
 }
 
-pub async fn next_event() -> crate::error::Result<AppEvent> {
+pub async fn next_event(events: &mut EventStream) -> crate::error::Result<AppEvent> {
     loop {
-        let mut events = EventStream::new();
-
         let event: Option<()> = tokio::select! {
             maybe_event = events.next() => {
                 match maybe_event {
@@ -119,15 +117,16 @@ pub async fn load_issue_thread(db_path: &str, app: &mut App) -> crate::error::Re
     if issue_idx >= app.issues.len() {
         return Ok(false);
     }
-    let issue_id = app.issues[issue_idx].issue_id;
+
+    let issue = &app.issues[issue_idx];
+    let issue_id = issue.issue_id;
 
     let db = Database::open(db_path).await?;
     let conn = db.conn();
-    let iss = issue::get_by_id(conn, issue_id).await?;
-    let comments = comment::list_issue_comments(conn, iss.issue_id).await?;
+    let comments = comment::list_issue_comments(conn, issue_id).await?;
 
     let thread = Thread::from(&crate::db::models::IssueWithComments {
-        issue: iss,
+        issue: issue.clone(),
         comments,
     });
 
@@ -144,7 +143,7 @@ pub async fn load_branch_thread(
     db_path: &str,
     branch_name: &str,
     app: &mut App,
-) -> crate::error::Result<()> {
+) -> crate::error::Result<bool> {
     let db = Database::open(db_path).await?;
     let conn = db.conn();
     let br = crate::db::branch::get_by_name(conn, branch_name).await?;
@@ -153,6 +152,12 @@ pub async fn load_branch_thread(
         branch: br,
         comments,
     });
+
+    let changed = match &app.thread {
+        Some(t) => t.updated_at != thread.updated_at || t.comments.len() != thread.comments.len(),
+        None => true,
+    };
+
     app.thread = Some(thread);
-    Ok(())
+    Ok(changed)
 }

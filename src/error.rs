@@ -45,10 +45,15 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub fn classify_db_error(e: turso::Error) -> Error {
-    if e.to_string().to_lowercase().contains("lock") {
-        Error::LockContention
-    } else {
-        Error::Database(e)
+    match &e {
+        turso::Error::Busy(_) => Error::LockContention,
+        _ => {
+            if e.to_string().to_lowercase().contains("lock") {
+                Error::LockContention
+            } else {
+                Error::Database(e)
+            }
+        }
     }
 }
 
@@ -57,8 +62,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn classify_db_error_maps_lock() {
+    fn classify_db_error_maps_busy_variant() {
         let e = turso::Error::Busy("database is locked".to_string());
+        match classify_db_error(e) {
+            Error::LockContention => {}
+            other => panic!("expected LockContention, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_db_error_maps_lock_in_message() {
+        let e = turso::Error::ConversionFailure("lock contention detected".to_string());
         match classify_db_error(e) {
             Error::LockContention => {}
             other => panic!("expected LockContention, got {other:?}"),
