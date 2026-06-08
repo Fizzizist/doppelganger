@@ -8,17 +8,6 @@ pub fn repo_root(repo: &git2::Repository) -> crate::error::Result<std::path::Pat
         .ok_or(crate::error::Error::NoRepository)
 }
 
-pub fn author_from_config(
-    repo: &git2::Repository,
-) -> crate::error::Result<(String, Option<String>)> {
-    let config = repo.config()?;
-    let name = config
-        .get_string("user.name")
-        .map_err(|_| crate::error::Error::MissingAuthorName)?;
-    let email = config.get_string("user.email").ok();
-    Ok((name, email))
-}
-
 pub fn current_branch(repo: &git2::Repository) -> crate::error::Result<String> {
     if repo.head_detached()? {
         return Err(crate::error::Error::DetachedHead);

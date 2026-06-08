@@ -23,6 +23,7 @@ syntect-assets = "0.23.6"
 the-other-tui-markdown = "0.1.0"
 thiserror = "2.0.18"
 tokio = { version = "1.52.3", features = ["full"] }
+toml = "1.1.2"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 turso = "0.6.1"

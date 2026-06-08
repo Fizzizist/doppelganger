@@ -1,15 +1,9 @@
 mod common;
 
-use assert_cmd::Command;
 use common::TestRepo;
 
-fn dg_command() -> Command {
-    Command::cargo_bin("dg").expect("dg binary")
-}
-
 fn setup_with_issue(repo: &TestRepo) {
-    dg_command()
-        .current_dir(&repo.path)
+    repo.dg_command()
         .arg("issue")
         .arg("create")
         .arg("issue description")
@@ -22,8 +16,8 @@ async fn branch_create() {
     let repo = TestRepo::new_with_commit();
     setup_with_issue(&repo);
 
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("create")
         .arg("1")
@@ -52,8 +46,8 @@ async fn branch_create_duplicate_fails() {
     let repo = TestRepo::new_with_commit();
     setup_with_issue(&repo);
 
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("create")
         .arg("1")
@@ -62,8 +56,8 @@ async fn branch_create_duplicate_fails() {
         .expect("command failed to execute");
     assert!(output.status.success(), "first create should succeed");
 
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("create")
         .arg("1")
@@ -87,9 +81,8 @@ async fn branch_overwrite_creates_when_no_record() {
     let repo = TestRepo::new_with_commit();
     setup_with_issue(&repo);
 
-    // --overwrite with no existing record should create it, not error.
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("create")
         .arg("1")
@@ -116,8 +109,8 @@ async fn branch_create_with_overwrite() {
     let repo = TestRepo::new_with_commit();
     setup_with_issue(&repo);
 
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("create")
         .arg("1")
@@ -126,8 +119,8 @@ async fn branch_create_with_overwrite() {
         .expect("command failed to execute");
     assert!(output.status.success(), "first create should succeed");
 
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("create")
         .arg("1")
@@ -154,8 +147,8 @@ async fn branch_read() {
     let repo = TestRepo::new_with_commit();
     setup_with_issue(&repo);
 
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("create")
         .arg("1")
@@ -164,8 +157,8 @@ async fn branch_read() {
         .expect("command failed to execute");
     assert!(output.status.success(), "branch create should succeed");
 
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("read")
         .output()
@@ -189,8 +182,8 @@ async fn branch_read() {
 #[tokio::test]
 async fn branch_read_no_record() {
     let repo = TestRepo::new_with_commit();
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("read")
         .output()
@@ -210,8 +203,8 @@ async fn branch_read_no_record() {
 #[tokio::test]
 async fn branch_comment_no_record() {
     let repo = TestRepo::new_with_commit();
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("comment")
         .arg("orphan comment")
@@ -234,8 +227,8 @@ async fn branch_comment() {
     let repo = TestRepo::new_with_commit();
     setup_with_issue(&repo);
 
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("create")
         .arg("1")
@@ -244,8 +237,8 @@ async fn branch_comment() {
         .expect("command failed to execute");
     assert!(output.status.success(), "branch create should succeed");
 
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("comment")
         .arg("hello")
@@ -266,8 +259,8 @@ async fn branch_comment() {
 async fn branch_create_invalid_issue() {
     let repo = TestRepo::new_with_commit();
 
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("create")
         .arg("999")

@@ -3,7 +3,7 @@ mod common;
 use std::sync::OnceLock;
 
 use common::TestRepo;
-use doppelganger::git::{author_from_config, current_branch, discover_repo};
+use doppelganger::git::{current_branch, discover_repo};
 use tempfile::TempDir;
 
 /// Point libgit2's global/system/XDG config search paths at an empty directory
@@ -74,7 +74,6 @@ async fn current_branch_returns_name() {
     let repo = git2::Repository::open(&repo_dir.path).expect("open repo");
 
     let branch = current_branch(&repo).expect("current branch should work");
-    // git 2.28+ defaults to "main"/"trunk"; older versions default to "master".
     assert!(
         !branch.is_empty(),
         "current_branch should return a non-empty branch name, got: {branch:?}"
@@ -87,7 +86,6 @@ async fn current_branch_detached_head_errors() {
     let repo_dir = TestRepo::new_with_commit();
     let repo = git2::Repository::open(&repo_dir.path).expect("open repo");
 
-    // Detach HEAD onto the current commit.
     let head_commit = repo
         .head()
         .expect("head")
@@ -101,47 +99,5 @@ async fn current_branch_detached_head_errors() {
         Err(doppelganger::error::Error::DetachedHead) => {}
         Err(e) => panic!("expected DetachedHead, got: {e}"),
         Ok(name) => panic!("expected DetachedHead, got branch name: {name}"),
-    }
-}
-
-#[tokio::test]
-async fn author_from_config_with_email() {
-    isolate_git_config();
-    let repo_dir = TestRepo::new();
-    let repo = git2::Repository::open(&repo_dir.path).expect("open repo");
-
-    let (name, email) = author_from_config(&repo).expect("author_from_config should succeed");
-    assert_eq!(name, "Test User");
-    assert_eq!(email.as_deref(), Some("test@example.com"));
-}
-
-#[tokio::test]
-async fn author_from_config_without_email_is_none() {
-    isolate_git_config();
-    let repo_dir = TestRepo::new_no_email();
-    let repo = git2::Repository::open(&repo_dir.path).expect("open repo");
-
-    let (name, email) = author_from_config(&repo).expect("author_from_config should succeed");
-    assert_eq!(name, "Test User");
-    assert_eq!(
-        email, None,
-        "email must be None when not configured anywhere"
-    );
-}
-
-#[tokio::test]
-async fn author_from_config_missing_name() {
-    isolate_git_config();
-    let dir = tempfile::tempdir().expect("temp dir");
-    let path = dir.path().to_path_buf();
-    git2::Repository::init(&path).expect("git init");
-
-    let repo = git2::Repository::open(&path).expect("open repo");
-    let result = author_from_config(&repo);
-
-    match result {
-        Err(doppelganger::error::Error::MissingAuthorName) => {}
-        Err(e) => panic!("expected MissingAuthorName, got: {e}"),
-        Ok((name, _)) => panic!("expected MissingAuthorName, got name: {name}"),
     }
 }

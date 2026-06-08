@@ -204,18 +204,13 @@ async fn concurrent_writes_while_polling() {
     assert_eq!(issues.len(), 20, "all 20 concurrent writes should succeed");
 }
 
-use assert_cmd::Command;
 use common::TestRepo;
-
-fn dg_command() -> Command {
-    Command::cargo_bin("dg").expect("dg binary")
-}
 
 #[tokio::test]
 async fn branch_tui_no_branch_record() {
     let repo = TestRepo::new_with_commit();
-    let output = dg_command()
-        .current_dir(&repo.path)
+    let output = repo
+        .dg_command()
         .arg("branch")
         .arg("tui")
         .output()
