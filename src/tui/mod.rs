@@ -12,8 +12,16 @@ use crate::db::Database;
 use crate::tui::app::Screen;
 use crossterm::event::{EventStream, KeyCode};
 
+fn log_path_from_db_path(db_path: &str) -> String {
+    if let Some(stripped) = db_path.strip_suffix(".db") {
+        format!("{stripped}.log")
+    } else {
+        format!("{db_path}.log")
+    }
+}
+
 pub async fn run_issue_tui(db_path: &str) -> crate::error::Result<()> {
-    crate::logging::init();
+    crate::logging::init(&log_path_from_db_path(db_path));
 
     let mut guard = terminal::TuiGuard::init()?;
     let mut app = App::new();
@@ -63,7 +71,7 @@ pub async fn run_issue_tui(db_path: &str) -> crate::error::Result<()> {
 }
 
 pub async fn run_branch_tui(db_path: &str, repo: &git2::Repository) -> crate::error::Result<()> {
-    crate::logging::init();
+    crate::logging::init(&log_path_from_db_path(db_path));
 
     let branch_name = crate::git::current_branch(repo)?;
 

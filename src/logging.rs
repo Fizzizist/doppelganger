@@ -3,9 +3,9 @@ use tracing_subscriber::EnvFilter;
 
 static LOGGING_INIT: OnceLock<()> = OnceLock::new();
 
-pub fn init() {
+pub fn init(log_path: &str) {
     LOGGING_INIT.get_or_init(|| {
-        let log_file = std::fs::File::create(".doppelganger.log").ok();
+        let log_file = std::fs::File::create(log_path).ok();
         let env_filter =
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
 
