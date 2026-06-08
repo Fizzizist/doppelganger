@@ -6,7 +6,7 @@ pub mod models;
 pub mod row;
 pub mod schema;
 
-use crate::error::Result;
+use crate::error::{Error, Result, classify_db_error};
 
 pub struct Database {
     conn: turso::Connection,
@@ -14,11 +14,37 @@ pub struct Database {
 
 impl Database {
     pub async fn open(path: &str) -> Result<Self> {
-        let db = turso::Builder::new_local(path).build().await?;
-        let conn = db.connect()?;
-        let database = Self { conn };
-        database.prepare().await?;
-        Ok(database)
+        let max_retries = 200;
+        let delay = std::time::Duration::from_millis(25);
+
+        for attempt in 0..max_retries {
+            let result: Result<Self> = async {
+                let db = turso::Builder::new_local(path)
+                    .experimental_multiprocess_wal(true)
+                    .build()
+                    .await?;
+                let conn = db.connect()?;
+                let database = Self { conn };
+                database.prepare().await?;
+                Ok(database)
+            }
+            .await
+            .map_err(|e| match e {
+                Error::Database(e) => classify_db_error(e),
+                other => other,
+            });
+
+            match result {
+                Ok(db) => return Ok(db),
+                Err(Error::LockContention) if attempt < max_retries - 1 => {
+                    tokio::time::sleep(delay).await;
+                }
+                Err(Error::LockContention) => return Err(Error::LockContention),
+                Err(e) => return Err(e),
+            }
+        }
+
+        Err(Error::LockContention)
     }
 
     pub async fn open_in_memory() -> Result<Self> {
@@ -44,11 +70,40 @@ impl Database {
     }
 
     pub async fn checkpoint(&self) -> Result<()> {
-        let mut rows = self
-            .conn
-            .query("PRAGMA wal_checkpoint(TRUNCATE)", ())
-            .await?;
-        while rows.next().await?.is_some() {}
+        let max_retries = 200;
+        let delay = std::time::Duration::from_millis(25);
+
+        for attempt in 0..max_retries {
+            let result: Result<()> = async {
+                let mut rows = self
+                    .conn
+                    .query("PRAGMA wal_checkpoint(TRUNCATE)", ())
+                    .await?;
+                while rows.next().await?.is_some() {}
+                Ok(())
+            }
+            .await
+            .map_err(|e| match e {
+                Error::Database(e) => classify_db_error(e),
+                other => other,
+            });
+
+            match result {
+                Ok(()) => return Ok(()),
+                Err(Error::LockContention) if attempt < max_retries - 1 => {
+                    tokio::time::sleep(delay).await;
+                }
+                Err(Error::LockContention) => {
+                    tracing::warn!(
+                        "checkpoint failed after {} retries due to lock contention",
+                        max_retries
+                    );
+                    return Ok(());
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
         Ok(())
     }
 

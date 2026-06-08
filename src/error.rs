@@ -14,6 +14,9 @@ pub enum Error {
     #[error("validation error: {0}")]
     Validation(String),
 
+    #[error("database lock contention")]
+    LockContention,
+
     #[error("database error: {0}")]
     Database(#[from] turso::Error),
 
@@ -34,6 +37,54 @@ pub enum Error {
 
     #[error("issue not found: #{0}")]
     IssueNotFound(i64),
+
+    #[error("tui error: {0}")]
+    Tui(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+pub fn classify_db_error(e: turso::Error) -> Error {
+    match &e {
+        turso::Error::Busy(_) => Error::LockContention,
+        _ => {
+            if e.to_string().to_lowercase().contains("lock") {
+                Error::LockContention
+            } else {
+                Error::Database(e)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classify_db_error_maps_busy_variant() {
+        let e = turso::Error::Busy("database is locked".to_string());
+        match classify_db_error(e) {
+            Error::LockContention => {}
+            other => panic!("expected LockContention, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_db_error_maps_lock_in_message() {
+        let e = turso::Error::ConversionFailure("lock contention detected".to_string());
+        match classify_db_error(e) {
+            Error::LockContention => {}
+            other => panic!("expected LockContention, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_db_error_passes_through_other() {
+        let e = turso::Error::ConversionFailure("something else".to_string());
+        match classify_db_error(e) {
+            Error::Database(_) => {}
+            other => panic!("expected Database, got {other:?}"),
+        }
+    }
+}

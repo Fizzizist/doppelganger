@@ -301,3 +301,65 @@ async fn checkpoint_truncates_wal_and_persists_data() {
         .expect("issue should persist after checkpoint and reopen");
     assert_eq!(fetched.description, "checkpoint issue");
 }
+
+#[tokio::test]
+async fn issue_list_returns_empty() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+    let issues = issue::list(conn).await.expect("list issues");
+    assert!(issues.is_empty(), "should return empty vec for no issues");
+}
+
+#[tokio::test]
+async fn issue_list_returns_ordered_by_updated_at_desc() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+    let author = author::find_or_create(conn, "Lister", Some("l@b.com"))
+        .await
+        .expect("create author");
+
+    let first = issue::create(conn, None, "first issue", author.author_id)
+        .await
+        .expect("create first");
+    let second = issue::create(conn, None, "second issue", author.author_id)
+        .await
+        .expect("create second");
+    let third = issue::create(conn, None, "third issue", author.author_id)
+        .await
+        .expect("create third");
+
+    let issues = issue::list(conn).await.expect("list issues");
+    assert_eq!(issues.len(), 3);
+    assert_eq!(issues[0].issue_id, third.issue_id);
+    assert_eq!(issues[1].issue_id, second.issue_id);
+    assert_eq!(issues[2].issue_id, first.issue_id);
+}
+
+#[tokio::test]
+async fn fingerprint_differs_after_insert() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+    let author = author::find_or_create(conn, "Checker", Some("c@b.com"))
+        .await
+        .expect("create author");
+
+    let initial_issues = issue::list(conn).await.expect("list initial");
+    let fp1: String = initial_issues
+        .iter()
+        .map(|i| format!("{}:{}", i.issue_id, i.updated_at))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    issue::create(conn, None, "new issue", author.author_id)
+        .await
+        .expect("create issue");
+
+    let after_issues = issue::list(conn).await.expect("list after insert");
+    let fp2: String = after_issues
+        .iter()
+        .map(|i| format!("{}:{}", i.issue_id, i.updated_at))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    assert_ne!(fp1, fp2, "fingerprint should differ after insert");
+}

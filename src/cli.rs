@@ -33,6 +33,7 @@ pub enum IssueCommands {
         issue_number: i64,
         content: Option<String>,
     },
+    Tui,
 }
 
 #[derive(Subcommand)]
@@ -47,4 +48,5 @@ pub enum BranchCommands {
     Comment {
         content: Option<String>,
     },
+    Tui,
 }

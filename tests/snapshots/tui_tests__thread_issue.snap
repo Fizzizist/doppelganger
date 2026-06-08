@@ -1,0 +1,28 @@
+---
+source: tests/tui_tests.rs
+expression: output
+---
+Fix login bug  Alice  2025-01-02 12:00:00                                       
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+Users can't log in on mobile.                                                   
+                                                                                
+Steps:                                                                          
+                                                                                
+1. Open app                                                                     
+2. Tap login                                                                    
+                                                                                
+Bob 2025-01-01 10:00:00                                                         
+I can reproduce this                                                            
+                                                                                
+Charlie 2025-01-01 11:00:00                                                     
+Fix is in progress                                                              
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+j/k: scroll  Ctrl+u/Ctrl+d: page  h/q/Esc: back
