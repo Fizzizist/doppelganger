@@ -8,8 +8,20 @@ pub enum Error {
     #[error("HEAD is detached; check out a branch before using doppelganger")]
     DetachedHead,
 
-    #[error("git config user.name is required but not set")]
-    MissingAuthorName,
+    #[error("config directory unavailable")]
+    ConfigDirUnavailable,
+
+    #[error("config parse error: {0}")]
+    ConfigParse(#[from] toml::de::Error),
+
+    #[error("duplicate profile identifier: '{0}' is a reserved name")]
+    DuplicateProfile(String),
+
+    #[error("unknown profile: '{0}'")]
+    UnknownProfile(String),
+
+    #[error("missing required config field: '{0}'")]
+    MissingProfileField(String),
 
     #[error("validation error: {0}")]
     Validation(String),
