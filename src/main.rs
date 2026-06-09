@@ -56,7 +56,12 @@ async fn run() -> doppelganger::error::Result<RunOutcome> {
             match cli.command {
                 Commands::Issue { command } => match command {
                     IssueCommands::Tui => {
-                        doppelganger::tui::run_issue_tui(db_path_str).await?;
+                        doppelganger::tui::run_issue_tui(
+                            db_path_str,
+                            &author_name,
+                            author_email.as_deref(),
+                        )
+                        .await?;
                         Ok(RunOutcome::Completed)
                     }
                     other_command => {
@@ -76,7 +81,13 @@ async fn run() -> doppelganger::error::Result<RunOutcome> {
                 },
                 Commands::Branch { command } => match command {
                     BranchCommands::Tui => {
-                        doppelganger::tui::run_branch_tui(db_path_str, &repo).await?;
+                        doppelganger::tui::run_branch_tui(
+                            db_path_str,
+                            &repo,
+                            &author_name,
+                            author_email.as_deref(),
+                        )
+                        .await?;
                         Ok(RunOutcome::Completed)
                     }
                     other_command => {

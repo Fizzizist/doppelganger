@@ -1,22 +1,22 @@
 ---
 source: tests/tui_tests.rs
-assertion_line: 68
+assertion_line: 258
 expression: output
 ---
 ┌Issues────────────────────────────────────────────────────────────────────────┐
-│#     Name                       Author                    Updated            │
+│   #     Name                     Author                   Updated            │
+│>> 1     First                    Alice                    2025-01-02 12:00:00│
 │                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
+│                   ┌New issue name (blank = untitled)─────┐                   │
+│                   │                                      │                   │
+│                   │                                      │                   │
+│                   │                                      │                   │
+│                   └──────────────────────────────────────┘                   │
 │                                                                              │
 │                                                                              │
 │                                                                              │
