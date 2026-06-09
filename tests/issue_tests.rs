@@ -351,6 +351,44 @@ async fn human_and_author_flags_are_mutually_exclusive() {
 }
 
 #[tokio::test]
+async fn missing_required_profile_field_exits_with_error() {
+    let repo = TestRepo::new();
+
+    let broken_config_dir = tempfile::tempdir().expect("config temp dir");
+    let cfg_dir = broken_config_dir.path().join("doppelganger");
+    std::fs::create_dir_all(&cfg_dir).expect("create config dir");
+    std::fs::write(
+        cfg_dir.join("config.toml"),
+        r#"
+[default_human_author]
+name = "Only Human"
+email = "human@example.com"
+"#,
+    )
+    .expect("write broken config");
+
+    let output = repo
+        .dg_command()
+        .env("DOPPELGANGER_CONFIG_DIR", broken_config_dir.path())
+        .arg("issue")
+        .arg("create")
+        .arg("should fail")
+        .output()
+        .expect("command failed to execute");
+
+    assert!(
+        !output.status.success(),
+        "should fail with missing required field, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("default_robot_author"),
+        "stderr should name the missing field, got: {stderr}"
+    );
+}
+
+#[tokio::test]
 async fn first_run_writes_sample_and_exits_zero() {
     let repo = TestRepo::new();
     let empty_config_dir = tempfile::tempdir().expect("empty config dir");

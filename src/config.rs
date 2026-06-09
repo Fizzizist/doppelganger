@@ -93,12 +93,22 @@ pub fn load_or_init() -> Result<LoadOutcome> {
 }
 
 fn load_from_path(path: PathBuf) -> Result<LoadOutcome> {
-    if !path.exists() {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+    {
+        Ok(file) => {
+            use std::io::Write;
+            write!(&file, "{}", SAMPLE_CONFIG)?;
+            return Ok(LoadOutcome::Created(path));
         }
-        std::fs::write(&path, SAMPLE_CONFIG)?;
-        return Ok(LoadOutcome::Created(path));
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(e.into()),
     }
 
     let content = std::fs::read_to_string(&path)?;
@@ -327,6 +337,17 @@ name = "Sneaky"
         match result {
             Err(Error::DuplicateProfile(id)) => assert_eq!(id, "default_human_author"),
             other => panic!("expected DuplicateProfile, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn malformed_toml_yields_config_parse_error() {
+        let dir = temp_config_dir();
+        let path = write_config(&dir, "this is [not valid {{{ toml");
+        let result = load_from_path(path);
+        match result {
+            Err(Error::ConfigParse(_)) => {}
+            other => panic!("expected ConfigParse, got {other:?}"),
         }
     }
 
