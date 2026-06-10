@@ -122,13 +122,10 @@ async fn handle_key_event(
 
             guard.suspend()?;
 
-            let editor = crate::config::load_or_init()
-                .ok()
-                .and_then(|outcome| match outcome {
-                    crate::config::LoadOutcome::Loaded(c) => Some(c.editor),
-                    crate::config::LoadOutcome::Created(_) => None,
-                })
-                .unwrap_or_else(crate::config::default_editor);
+            let editor = match crate::config::load_or_init()? {
+                crate::config::LoadOutcome::Loaded(c) => c.editor,
+                crate::config::LoadOutcome::Created(_, c) => c.editor,
+            };
 
             let content_result = editor::spawn_editor(&editor);
 

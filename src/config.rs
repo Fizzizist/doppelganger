@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::error::{Error, Result};
 
-pub fn default_editor() -> String {
+fn default_editor() -> String {
     "nvim".to_string()
 }
 
@@ -82,7 +82,7 @@ impl Config {
 
 #[derive(Debug)]
 pub enum LoadOutcome {
-    Created(PathBuf),
+    Created(PathBuf, Config),
     Loaded(Config),
 }
 
@@ -112,7 +112,10 @@ fn load_from_path(path: PathBuf) -> Result<LoadOutcome> {
         Ok(file) => {
             use std::io::Write;
             write!(&file, "{}", SAMPLE_CONFIG)?;
-            return Ok(LoadOutcome::Created(path));
+            drop(file);
+            let content = std::fs::read_to_string(&path)?;
+            let config: Config = toml::from_str(&content)?;
+            return Ok(LoadOutcome::Created(path, config));
         }
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
         Err(e) => return Err(e.into()),
@@ -171,7 +174,7 @@ mod tests {
         let path = config_file_path(&dir);
         let outcome = load_from_path(path).expect("load_from_path should succeed");
         match outcome {
-            LoadOutcome::Created(p) => {
+            LoadOutcome::Created(p, _config) => {
                 assert!(p.exists(), "sample file should be written");
                 let content = std::fs::read_to_string(&p).expect("read sample");
                 assert!(content.contains("default_human_author"));
@@ -215,7 +218,7 @@ email = "ci@example.com"
                 );
                 assert!(config.profiles.contains_key("ci"));
             }
-            LoadOutcome::Created(_) => panic!("expected Loaded, got Created"),
+            LoadOutcome::Created(_, _) => panic!("expected Loaded, got Created"),
         }
     }
 

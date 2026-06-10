@@ -40,7 +40,7 @@ async fn run() -> doppelganger::error::Result<RunOutcome> {
     let cli = Cli::parse();
 
     match config::load_or_init()? {
-        LoadOutcome::Created(path) => Ok(RunOutcome::FirstRun(path)),
+        LoadOutcome::Created(path, _config) => Ok(RunOutcome::FirstRun(path)),
         LoadOutcome::Loaded(config) => {
             let selection = cli.author_selection();
             let (author_name, author_email) = config.resolve(selection)?;
