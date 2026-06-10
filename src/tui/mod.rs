@@ -128,7 +128,7 @@ async fn handle_key_event(
                     crate::config::LoadOutcome::Loaded(c) => Some(c.editor),
                     crate::config::LoadOutcome::Created(_) => None,
                 })
-                .unwrap_or_else(|| "nvim".to_string());
+                .unwrap_or_else(crate::config::default_editor);
 
             let content_result = editor::spawn_editor(&editor);
 

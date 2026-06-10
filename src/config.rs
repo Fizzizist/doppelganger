@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::error::{Error, Result};
 
-fn default_editor() -> String {
+pub fn default_editor() -> String {
     "nvim".to_string()
 }
 

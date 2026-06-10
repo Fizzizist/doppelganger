@@ -45,6 +45,9 @@ async fn run() -> doppelganger::error::Result<RunOutcome> {
             let selection = cli.author_selection();
             let (author_name, author_email) = config.resolve(selection)?;
 
+            let tui_selection = cli.tui_author_selection();
+            let (tui_author_name, tui_author_email) = config.resolve(tui_selection)?;
+
             let repo = discover_repo()?;
             let root = repo_root(&repo)?;
 
@@ -58,8 +61,8 @@ async fn run() -> doppelganger::error::Result<RunOutcome> {
                     IssueCommands::Tui => {
                         doppelganger::tui::run_issue_tui(
                             db_path_str,
-                            &author_name,
-                            author_email.as_deref(),
+                            &tui_author_name,
+                            tui_author_email.as_deref(),
                         )
                         .await?;
                         Ok(RunOutcome::Completed)
@@ -84,8 +87,8 @@ async fn run() -> doppelganger::error::Result<RunOutcome> {
                         doppelganger::tui::run_branch_tui(
                             db_path_str,
                             &repo,
-                            &author_name,
-                            author_email.as_deref(),
+                            &tui_author_name,
+                            tui_author_email.as_deref(),
                         )
                         .await?;
                         Ok(RunOutcome::Completed)
