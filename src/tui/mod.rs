@@ -105,66 +105,80 @@ async fn run_loop(
 
 async fn handle_key_event(
     db_path: &str,
-    _mode: &TuiMode,
+    mode: &TuiMode,
     guard: &mut terminal::TuiGuard,
     app: &mut App,
     code: KeyCode,
     modifiers: KeyModifiers,
 ) -> Result<bool> {
-    if matches!(&app.modal, Some(ModalState::NameInput)) && code == KeyCode::Enter {
-        let name = app.confirm_name_input();
-        let name_opt = if name.is_empty() {
-            None
-        } else {
-            Some(name.as_str())
-        };
+    if app.modal.is_some() {
+        if matches!(&app.modal, Some(ModalState::NameInput)) && code == KeyCode::Enter {
+            let name = app.confirm_name_input();
+            let name_opt = if name.is_empty() {
+                None
+            } else {
+                Some(name.as_str())
+            };
 
-        guard.suspend()?;
+            guard.suspend()?;
 
-        let editor = crate::config::load_or_init()
-            .ok()
-            .and_then(|outcome| match outcome {
-                crate::config::LoadOutcome::Loaded(c) => Some(c.editor),
-                crate::config::LoadOutcome::Created(_) => None,
-            })
-            .unwrap_or_else(|| "nvim".to_string());
+            let editor = crate::config::load_or_init()
+                .ok()
+                .and_then(|outcome| match outcome {
+                    crate::config::LoadOutcome::Loaded(c) => Some(c.editor),
+                    crate::config::LoadOutcome::Created(_) => None,
+                })
+                .unwrap_or_else(|| "nvim".to_string());
 
-        let content_result = editor::spawn_editor(&editor);
+            let content_result = editor::spawn_editor(&editor);
 
-        guard.resume()?;
+            guard.resume()?;
 
-        match content_result {
-            Ok(description) => {
-                let db = crate::db::Database::open(db_path).await?;
-                let conn = db.conn();
-                let author = crate::db::author::find_or_create(
-                    conn,
-                    &app.author_name,
-                    app.author_email.as_deref(),
-                )
-                .await?;
-                let created =
-                    crate::db::issue::create(conn, name_opt, &description, author.author_id)
-                        .await?;
-                db.checkpoint().await?;
-                drop(db);
+            match content_result {
+                Ok(description) => {
+                    let db = crate::db::Database::open(db_path).await?;
+                    let conn = db.conn();
+                    let author = crate::db::author::find_or_create(
+                        conn,
+                        &app.author_name,
+                        app.author_email.as_deref(),
+                    )
+                    .await?;
+                    let created =
+                        crate::db::issue::create(conn, name_opt, &description, author.author_id)
+                            .await?;
+                    db.checkpoint().await?;
+                    drop(db);
 
-                event::load_issues(db_path, app).await?;
-                let idx = app
-                    .issues
-                    .iter()
-                    .position(|i| i.issue_id == created.issue_id)
-                    .unwrap_or(0);
-                app.selected_issue = idx;
-                app.select_issue();
-                event::load_issue_thread(db_path, app).await?;
+                    event::load_issues(db_path, app).await?;
+                    let idx = app
+                        .issues
+                        .iter()
+                        .position(|i| i.issue_id == created.issue_id)
+                        .expect("newly created issue must be in refreshed list");
+                    app.selected_issue = idx;
+                    app.select_issue();
+                    event::load_issue_thread(db_path, app).await?;
+                }
+                Err(e) => {
+                    app.show_error(e.to_string());
+                }
             }
-            Err(e) => {
-                app.show_error(e.to_string());
-            }
+
+            return Ok(false);
         }
 
-        return Ok(false);
+        return Ok(event::handle_modal_key(app, code, modifiers));
+    }
+
+    if matches!(mode, TuiMode::Branch { .. }) {
+        match code {
+            KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('h') => return Ok(true),
+            _ => {
+                event::handle_thread_scroll(app, code, modifiers);
+                return Ok(false);
+            }
+        }
     }
 
     Ok(event::handle_key(app, code, modifiers))

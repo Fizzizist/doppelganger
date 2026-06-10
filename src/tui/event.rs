@@ -5,25 +5,17 @@ use crate::tui::app::{App, ModalState, Screen};
 use crate::tui::model::Thread;
 
 pub fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> bool {
-    if app.modal.is_some() {
-        return handle_modal_key(app, code, modifiers);
-    }
-
     match app.screen {
         Screen::IssueList => handle_issue_list_key(app, code, modifiers),
         Screen::Thread => handle_thread_key(app, code, modifiers),
     }
 }
 
-fn handle_modal_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> bool {
+pub fn handle_modal_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> bool {
     match &app.modal {
         Some(ModalState::NameInput) => match (code, modifiers) {
             (KeyCode::Esc, _) => {
                 app.cancel_modal();
-                false
-            }
-            (KeyCode::Enter, _) => {
-                app.confirm_name_input();
                 false
             }
             (KeyCode::Backspace, _) => {

@@ -89,7 +89,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tui::event::handle_key;
+    use crate::tui::event::{handle_key, handle_modal_key};
     use crossterm::event::{KeyCode, KeyModifiers};
 
     fn sample_issues() -> Vec<crate::db::models::Issue> {
@@ -322,13 +322,13 @@ mod tests {
     fn modal_key_typing_appends_to_buffer() {
         let mut app = App::new("test".to_string(), None);
         app.start_name_input();
-        assert!(!handle_key(
+        assert!(!handle_modal_key(
             &mut app,
             KeyCode::Char('a'),
             KeyModifiers::NONE
         ));
         assert_eq!(app.input_buffer, "a");
-        assert!(!handle_key(
+        assert!(!handle_modal_key(
             &mut app,
             KeyCode::Char('b'),
             KeyModifiers::NONE
@@ -341,7 +341,7 @@ mod tests {
         let mut app = App::new("test".to_string(), None);
         app.start_name_input();
         app.input_buffer = "abc".to_string();
-        assert!(!handle_key(
+        assert!(!handle_modal_key(
             &mut app,
             KeyCode::Backspace,
             KeyModifiers::NONE
@@ -354,27 +354,45 @@ mod tests {
         let mut app = App::new("test".to_string(), None);
         app.start_name_input();
         app.input_buffer = "typed".to_string();
-        assert!(!handle_key(&mut app, KeyCode::Esc, KeyModifiers::NONE));
+        assert!(!handle_modal_key(
+            &mut app,
+            KeyCode::Esc,
+            KeyModifiers::NONE
+        ));
         assert!(app.modal.is_none());
         assert!(app.input_buffer.is_empty());
     }
 
     #[test]
-    fn modal_enter_confirms_name() {
+    fn modal_enter_triggers_editor_flow() {
         let mut app = App::new("test".to_string(), None);
         app.start_name_input();
         app.input_buffer = "test issue".to_string();
-        let quit = handle_key(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+        let quit = handle_modal_key(&mut app, KeyCode::Enter, KeyModifiers::NONE);
         assert!(!quit);
-        assert!(app.modal.is_none());
-        assert!(app.input_buffer.is_empty());
     }
 
     #[test]
     fn error_modal_esc_dismisses() {
         let mut app = App::new("test".to_string(), None);
         app.show_error("fail");
-        assert!(!handle_key(&mut app, KeyCode::Esc, KeyModifiers::NONE));
+        assert!(!handle_modal_key(
+            &mut app,
+            KeyCode::Esc,
+            KeyModifiers::NONE
+        ));
+        assert!(app.modal.is_none());
+    }
+
+    #[test]
+    fn error_modal_enter_dismisses() {
+        let mut app = App::new("test".to_string(), None);
+        app.show_error("fail");
+        assert!(!handle_modal_key(
+            &mut app,
+            KeyCode::Enter,
+            KeyModifiers::NONE
+        ));
         assert!(app.modal.is_none());
     }
 }
