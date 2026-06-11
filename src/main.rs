@@ -40,10 +40,13 @@ async fn run() -> doppelganger::error::Result<RunOutcome> {
     let cli = Cli::parse();
 
     match config::load_or_init()? {
-        LoadOutcome::Created(path) => Ok(RunOutcome::FirstRun(path)),
+        LoadOutcome::Created(path, _config) => Ok(RunOutcome::FirstRun(path)),
         LoadOutcome::Loaded(config) => {
             let selection = cli.author_selection();
             let (author_name, author_email) = config.resolve(selection)?;
+
+            let tui_selection = cli.tui_author_selection();
+            let (tui_author_name, tui_author_email) = config.resolve(tui_selection)?;
 
             let repo = discover_repo()?;
             let root = repo_root(&repo)?;
@@ -56,7 +59,12 @@ async fn run() -> doppelganger::error::Result<RunOutcome> {
             match cli.command {
                 Commands::Issue { command } => match command {
                     IssueCommands::Tui => {
-                        doppelganger::tui::run_issue_tui(db_path_str).await?;
+                        doppelganger::tui::run_issue_tui(
+                            db_path_str,
+                            &tui_author_name,
+                            tui_author_email.as_deref(),
+                        )
+                        .await?;
                         Ok(RunOutcome::Completed)
                     }
                     other_command => {
@@ -76,7 +84,13 @@ async fn run() -> doppelganger::error::Result<RunOutcome> {
                 },
                 Commands::Branch { command } => match command {
                     BranchCommands::Tui => {
-                        doppelganger::tui::run_branch_tui(db_path_str, &repo).await?;
+                        doppelganger::tui::run_branch_tui(
+                            db_path_str,
+                            &repo,
+                            &tui_author_name,
+                            tui_author_email.as_deref(),
+                        )
+                        .await?;
                         Ok(RunOutcome::Completed)
                     }
                     other_command => {

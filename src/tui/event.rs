@@ -1,13 +1,41 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::db::{Database, comment, issue};
-use crate::tui::app::{App, Screen};
+use crate::tui::app::{App, ModalState, Screen};
 use crate::tui::model::Thread;
 
 pub fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> bool {
     match app.screen {
         Screen::IssueList => handle_issue_list_key(app, code, modifiers),
         Screen::Thread => handle_thread_key(app, code, modifiers),
+    }
+}
+
+pub fn handle_modal_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> bool {
+    match &app.modal {
+        Some(ModalState::NameInput) => match (code, modifiers) {
+            (KeyCode::Esc, _) => {
+                app.cancel_modal();
+                false
+            }
+            (KeyCode::Backspace, _) => {
+                app.input_buffer.pop();
+                false
+            }
+            (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {
+                app.input_buffer.push(c);
+                false
+            }
+            _ => false,
+        },
+        Some(ModalState::Error(_)) => match code {
+            KeyCode::Esc | KeyCode::Enter => {
+                app.cancel_modal();
+                false
+            }
+            _ => false,
+        },
+        None => false,
     }
 }
 
@@ -28,6 +56,10 @@ fn handle_issue_list_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) 
         }
         (KeyCode::Enter, _) | (KeyCode::Char('l'), _) => {
             app.select_issue();
+            false
+        }
+        (KeyCode::Char('n'), _) => {
+            app.start_name_input();
             false
         }
         _ => false,

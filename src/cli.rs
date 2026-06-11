@@ -26,6 +26,14 @@ impl Cli {
             AuthorSelection::Robot
         }
     }
+
+    pub fn tui_author_selection(&self) -> AuthorSelection {
+        if let Some(ref id) = self.author {
+            AuthorSelection::Named(id.clone())
+        } else {
+            AuthorSelection::Human
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -70,4 +78,50 @@ pub enum BranchCommands {
         content: Option<String>,
     },
     Tui,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    fn parse_cli(args: &[&str]) -> Cli {
+        Cli::try_parse_from(args).expect("parse cli args")
+    }
+
+    #[test]
+    fn tui_author_selection_defaults_to_human() {
+        let cli = parse_cli(&["dg", "issue", "tui"]);
+        match cli.tui_author_selection() {
+            AuthorSelection::Human => {}
+            other => panic!("expected Human, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tui_author_selection_with_author_flag() {
+        let cli = parse_cli(&["dg", "--author", "ci", "issue", "tui"]);
+        match cli.tui_author_selection() {
+            AuthorSelection::Named(id) => assert_eq!(id, "ci"),
+            other => panic!("expected Named, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cli_author_selection_defaults_to_robot() {
+        let cli = parse_cli(&["dg", "issue", "create", "test"]);
+        match cli.author_selection() {
+            AuthorSelection::Robot => {}
+            other => panic!("expected Robot, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cli_author_selection_human_flag() {
+        let cli = parse_cli(&["dg", "--human", "issue", "create", "test"]);
+        match cli.author_selection() {
+            AuthorSelection::Human => {}
+            other => panic!("expected Human, got {other:?}"),
+        }
+    }
 }

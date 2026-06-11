@@ -5,11 +5,16 @@ use serde::Deserialize;
 
 use crate::error::{Error, Result};
 
+fn default_editor() -> String {
+    "nvim".to_string()
+}
+
 const SAMPLE_CONFIG: &str = r#"# doppelganger configuration
 #
 # default_human_author: used when --human or --author default_human_author is passed
 # default_robot_author: used by default (robot/automated commits)
 # profiles.<id>: additional named author profiles
+# editor: text editor command for TUI content editing (default: nvim)
 
 [default_human_author]
 name = "Your Name"
@@ -36,6 +41,8 @@ pub struct Config {
     pub default_robot_author: Option<AuthorProfile>,
     #[serde(default)]
     pub profiles: HashMap<String, AuthorProfile>,
+    #[serde(default = "default_editor")]
+    pub editor: String,
 }
 
 #[derive(Debug, Clone)]
@@ -75,7 +82,7 @@ impl Config {
 
 #[derive(Debug)]
 pub enum LoadOutcome {
-    Created(PathBuf),
+    Created(PathBuf, Config),
     Loaded(Config),
 }
 
@@ -105,7 +112,10 @@ fn load_from_path(path: PathBuf) -> Result<LoadOutcome> {
         Ok(file) => {
             use std::io::Write;
             write!(&file, "{}", SAMPLE_CONFIG)?;
-            return Ok(LoadOutcome::Created(path));
+            drop(file);
+            let content = std::fs::read_to_string(&path)?;
+            let config: Config = toml::from_str(&content)?;
+            return Ok(LoadOutcome::Created(path, config));
         }
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
         Err(e) => return Err(e.into()),
@@ -164,7 +174,7 @@ mod tests {
         let path = config_file_path(&dir);
         let outcome = load_from_path(path).expect("load_from_path should succeed");
         match outcome {
-            LoadOutcome::Created(p) => {
+            LoadOutcome::Created(p, _config) => {
                 assert!(p.exists(), "sample file should be written");
                 let content = std::fs::read_to_string(&p).expect("read sample");
                 assert!(content.contains("default_human_author"));
@@ -208,7 +218,7 @@ email = "ci@example.com"
                 );
                 assert!(config.profiles.contains_key("ci"));
             }
-            LoadOutcome::Created(_) => panic!("expected Loaded, got Created"),
+            LoadOutcome::Created(_, _) => panic!("expected Loaded, got Created"),
         }
     }
 
@@ -224,6 +234,7 @@ email = "ci@example.com"
                 email: Some("h@example.com".to_string()),
             }),
             profiles: HashMap::new(),
+            editor: default_editor(),
         };
         let (name, email) = config.resolve(AuthorSelection::Robot).expect("resolve");
         assert_eq!(name, "Bot");
@@ -239,6 +250,7 @@ email = "ci@example.com"
             }),
             default_robot_author: None,
             profiles: HashMap::new(),
+            editor: default_editor(),
         };
         let (name, email) = config.resolve(AuthorSelection::Human).expect("resolve");
         assert_eq!(name, "Alice");
@@ -254,6 +266,7 @@ email = "ci@example.com"
             }),
             default_robot_author: None,
             profiles: HashMap::new(),
+            editor: default_editor(),
         };
         let (name1, _) = config
             .resolve(AuthorSelection::Human)
@@ -278,6 +291,7 @@ email = "ci@example.com"
             default_human_author: None,
             default_robot_author: None,
             profiles,
+            editor: default_editor(),
         };
         let (name, email) = config
             .resolve(AuthorSelection::Named("ci".to_string()))
@@ -360,8 +374,33 @@ name = "Sneaky"
             }),
             default_human_author: None,
             profiles: HashMap::new(),
+            editor: default_editor(),
         };
         let (_, email) = config.resolve(AuthorSelection::Robot).expect("resolve");
         assert_eq!(email, None);
+    }
+
+    #[test]
+    fn config_without_editor_defaults_to_nvim() {
+        let toml = r#"
+[default_human_author]
+name = "Alice"
+email = "alice@example.com"
+"#;
+        let config: Config = toml::from_str(toml).expect("parse");
+        assert_eq!(config.editor, "nvim");
+    }
+
+    #[test]
+    fn config_with_explicit_editor() {
+        let toml = r#"
+editor = "nano"
+
+[default_human_author]
+name = "Alice"
+email = "alice@example.com"
+"#;
+        let config: Config = toml::from_str(toml).expect("parse");
+        assert_eq!(config.editor, "nano");
     }
 }

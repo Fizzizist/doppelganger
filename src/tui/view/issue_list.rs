@@ -72,7 +72,7 @@ pub fn render(f: &mut ratatui::Frame, app: &App) {
 
     f.render_stateful_widget(table, chunks[0], &mut state);
 
-    let help = Paragraph::new("j/k: navigate  Enter/l: select  q: quit")
+    let help = Paragraph::new("j/k: navigate  n: new  Enter/l: select  q: quit")
         .style(Style::default().fg(Color::DarkGray));
     f.render_widget(help, chunks[1]);
 }

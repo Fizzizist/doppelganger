@@ -1,23 +1,23 @@
 ---
 source: tests/tui_tests.rs
-assertion_line: 68
+assertion_line: 273
 expression: output
 ---
 ┌Issues────────────────────────────────────────────────────────────────────────┐
-│#     Name                       Author                    Updated            │
+│   #     Name                     Author                   Updated            │
+│>> 1     First                    Alice                    2025-01-02 12:00:00│
 │                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
+│              ┌Error───────────────────────────────────────────┐              │
+│              │editor exited with non-zero status; assuming    │              │
+│              │cancel                                          │              │
+│              │                                                │              │
+│              │                                                │              │
+│              │                                                │              │
+│              └────────────────────────────────────────────────┘              │
 │                                                                              │
 │                                                                              │
 │                                                                              │

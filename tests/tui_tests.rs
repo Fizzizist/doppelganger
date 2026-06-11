@@ -44,7 +44,7 @@ fn render_to_string(
 
 #[test]
 fn issue_list_render_with_items() {
-    let mut app = App::new();
+    let mut app = App::default();
     app.issues = vec![
         make_issue(1, Some("Fix login bug"), "Users can't log in", "Alice"),
         make_issue(2, Some("Add dark mode"), "Implement dark theme", "Bob"),
@@ -62,7 +62,7 @@ fn issue_list_render_with_items() {
 
 #[test]
 fn issue_list_render_empty() {
-    let app = App::new();
+    let app = App::default();
 
     let output = render_to_string(80, 24, |f| view::issue_list::render(f, &app));
     insta::assert_snapshot!("issue_list_empty", output);
@@ -96,7 +96,7 @@ fn thread_render_issue() {
     ];
     let thread = Thread::from(&IssueWithComments { issue, comments });
 
-    let mut app = App::new();
+    let mut app = App::default();
     app.screen = Screen::Thread;
     app.thread = Some(thread);
 
@@ -126,7 +126,7 @@ fn thread_render_branch() {
     }];
     let thread = Thread::from(&BranchWithComments { branch, comments });
 
-    let mut app = App::new();
+    let mut app = App::default();
     app.screen = Screen::Thread;
     app.thread = Some(thread);
 
@@ -147,7 +147,7 @@ fn thread_render_scroll() {
         comments: Vec::new(),
     });
 
-    let mut app = App::new();
+    let mut app = App::default();
     app.screen = Screen::Thread;
     app.thread = Some(thread);
     app.thread_scroll = 2;
@@ -224,4 +224,47 @@ async fn branch_tui_no_branch_record() {
         stderr.contains("not found") || stderr.contains("branch create"),
         "stderr should explain the missing branch, got: {stderr}"
     );
+}
+
+#[test]
+fn issue_list_with_name_input_modal() {
+    let mut app = App::default();
+    app.issues = vec![
+        make_issue(1, Some("First"), "desc", "Alice"),
+        make_issue(2, Some("Second"), "desc", "Bob"),
+    ];
+    app.start_name_input();
+    app.input_buffer = "My Bug Report".to_string();
+
+    let output = render_to_string(80, 24, |f| {
+        view::issue_list::render(f, &app);
+        view::modal::render(f, &app);
+    });
+    insta::assert_snapshot!("issue_list_with_name_input_modal", output);
+}
+
+#[test]
+fn issue_list_with_empty_name_input_modal() {
+    let mut app = App::default();
+    app.issues = vec![make_issue(1, Some("First"), "desc", "Alice")];
+    app.start_name_input();
+
+    let output = render_to_string(80, 24, |f| {
+        view::issue_list::render(f, &app);
+        view::modal::render(f, &app);
+    });
+    insta::assert_snapshot!("issue_list_with_empty_name_input_modal", output);
+}
+
+#[test]
+fn issue_list_with_error_modal() {
+    let mut app = App::default();
+    app.issues = vec![make_issue(1, Some("First"), "desc", "Alice")];
+    app.show_error("editor exited with non-zero status; assuming cancel");
+
+    let output = render_to_string(80, 24, |f| {
+        view::issue_list::render(f, &app);
+        view::modal::render(f, &app);
+    });
+    insta::assert_snapshot!("issue_list_with_error_modal", output);
 }
