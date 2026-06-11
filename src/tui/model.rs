@@ -3,6 +3,7 @@ use crate::db::models::{
 };
 
 pub struct Thread {
+    pub issue_id: i64,
     pub title: String,
     pub author: String,
     pub created_at: String,
@@ -25,6 +26,7 @@ impl From<&Issue> for Thread {
             .cloned()
             .unwrap_or_else(|| truncate_to_80(&issue.description));
         Self {
+            issue_id: issue.issue_id,
             title,
             author: issue.author.clone(),
             created_at: issue.created_at.clone(),
@@ -46,6 +48,7 @@ impl From<&IssueWithComments> for Thread {
 impl From<&Branch> for Thread {
     fn from(branch: &Branch) -> Self {
         Self {
+            issue_id: branch.issue_id,
             title: branch.name.clone(),
             author: branch.author.clone(),
             created_at: branch.created_at.clone(),
@@ -115,7 +118,7 @@ mod tests {
             name: "feature-1".to_string(),
             description: "Branch description".to_string(),
             author: "Bob".to_string(),
-            issue_id: 1,
+            issue_id: 7,
             created_at: "2025-01-01 00:00:00".to_string(),
             updated_at: "2025-01-02 00:00:00".to_string(),
         }
@@ -125,6 +128,7 @@ mod tests {
     fn thread_from_issue_with_name() {
         let issue = test_issue();
         let thread = Thread::from(&issue);
+        assert_eq!(thread.issue_id, 1);
         assert_eq!(thread.title, "Test Issue");
         assert_eq!(thread.author, "Alice");
         assert!(thread.comments.is_empty());
@@ -136,6 +140,7 @@ mod tests {
         issue.name = None;
         issue.description = "x".repeat(100);
         let thread = Thread::from(&issue);
+        assert_eq!(thread.issue_id, 1);
         assert_eq!(thread.title.len(), 83);
         assert!(thread.title.ends_with("..."));
     }
@@ -146,6 +151,7 @@ mod tests {
         issue.name = None;
         issue.description = "Short".to_string();
         let thread = Thread::from(&issue);
+        assert_eq!(thread.issue_id, 1);
         assert_eq!(thread.title, "Short");
     }
 
@@ -172,6 +178,7 @@ mod tests {
         ];
         let iwc = IssueWithComments { issue, comments };
         let thread = Thread::from(&iwc);
+        assert_eq!(thread.issue_id, 1);
         assert_eq!(thread.comments.len(), 2);
         assert_eq!(thread.comments[0].content, "First");
         assert_eq!(thread.comments[1].content, "Second");
@@ -181,6 +188,7 @@ mod tests {
     fn thread_from_branch() {
         let branch = test_branch();
         let thread = Thread::from(&branch);
+        assert_eq!(thread.issue_id, 7);
         assert_eq!(thread.title, "feature-1");
         assert_eq!(thread.description, "Branch description");
     }
@@ -208,6 +216,7 @@ mod tests {
         ];
         let bwc = BranchWithComments { branch, comments };
         let thread = Thread::from(&bwc);
+        assert_eq!(thread.issue_id, 7);
         assert_eq!(thread.comments.len(), 2);
         assert_eq!(thread.comments[0].content, "Note");
         assert_eq!(thread.comments[1].content, "Reply");

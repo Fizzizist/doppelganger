@@ -35,6 +35,10 @@ pub fn render(f: &mut ratatui::Frame, app: &App) {
 
     let header = Paragraph::new(Line::from(vec![
         Span::styled(
+            format!("#{} ", thread.issue_id),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
             thread.title.clone(),
             Style::default().add_modifier(Modifier::BOLD),
         ),

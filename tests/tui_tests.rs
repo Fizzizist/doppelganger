@@ -227,6 +227,43 @@ async fn branch_tui_no_branch_record() {
 }
 
 #[test]
+fn thread_issue_number_display() {
+    let issue = make_issue(42, Some("Fix login bug"), "Description here", "Alice");
+    let thread = Thread::from(&IssueWithComments {
+        issue,
+        comments: Vec::new(),
+    });
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+
+    let output = render_to_string(80, 10, |f| view::thread::render(f, &app));
+    assert!(
+        output.contains("#42"),
+        "header should contain #42, got:\n{output}"
+    );
+    insta::assert_snapshot!("thread_issue_number_display", output);
+
+    // Verify the issue number is rendered in bold
+    let backend = ratatui::backend::TestBackend::new(80, 10);
+    let mut terminal = ratatui::Terminal::new(backend).expect("terminal");
+    terminal
+        .draw(|f| view::thread::render(f, &app))
+        .expect("draw");
+    let buffer = terminal.backend().buffer().clone();
+    let hash_cell = buffer.cell((0, 0)).expect("cell at #");
+    assert!(
+        hash_cell
+            .style()
+            .add_modifier
+            .contains(ratatui::style::Modifier::BOLD),
+        "issue number should be bold, got style: {:?}",
+        hash_cell.style(),
+    );
+}
+
+#[test]
 fn issue_list_with_name_input_modal() {
     let mut app = App::default();
     app.issues = vec![
