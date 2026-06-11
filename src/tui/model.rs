@@ -118,7 +118,7 @@ mod tests {
             name: "feature-1".to_string(),
             description: "Branch description".to_string(),
             author: "Bob".to_string(),
-            issue_id: 1,
+            issue_id: 7,
             created_at: "2025-01-01 00:00:00".to_string(),
             updated_at: "2025-01-02 00:00:00".to_string(),
         }
@@ -188,7 +188,7 @@ mod tests {
     fn thread_from_branch() {
         let branch = test_branch();
         let thread = Thread::from(&branch);
-        assert_eq!(thread.issue_id, 1);
+        assert_eq!(thread.issue_id, 7);
         assert_eq!(thread.title, "feature-1");
         assert_eq!(thread.description, "Branch description");
     }
@@ -216,7 +216,7 @@ mod tests {
         ];
         let bwc = BranchWithComments { branch, comments };
         let thread = Thread::from(&bwc);
-        assert_eq!(thread.issue_id, 1);
+        assert_eq!(thread.issue_id, 7);
         assert_eq!(thread.comments.len(), 2);
         assert_eq!(thread.comments[0].content, "Note");
         assert_eq!(thread.comments[1].content, "Reply");

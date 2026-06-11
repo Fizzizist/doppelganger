@@ -244,6 +244,23 @@ fn thread_issue_number_display() {
         "header should contain #42, got:\n{output}"
     );
     insta::assert_snapshot!("thread_issue_number_display", output);
+
+    // Verify the issue number is rendered in bold
+    let backend = ratatui::backend::TestBackend::new(80, 10);
+    let mut terminal = ratatui::Terminal::new(backend).expect("terminal");
+    terminal
+        .draw(|f| view::thread::render(f, &app))
+        .expect("draw");
+    let buffer = terminal.backend().buffer().clone();
+    let hash_cell = buffer.cell((0, 0)).expect("cell at #");
+    assert!(
+        hash_cell
+            .style()
+            .add_modifier
+            .contains(ratatui::style::Modifier::BOLD),
+        "issue number should be bold, got style: {:?}",
+        hash_cell.style(),
+    );
 }
 
 #[test]
