@@ -2,10 +2,10 @@
 source: tests/tui_tests.rs
 expression: output
 ---
-#1 Scrolled  Alice  2025-01-02 12:00:00                                         
+#42 Fix login bug  Alice  2025-01-02 12:00:00                                   
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-                                                                                
+Description here                                                                
                                                                                 
                                                                                 
                                                                                 
