@@ -93,4 +93,5 @@ sequenceDiagram
     Me->>Local Git Repo: maybe commit
     Me->>Implementer Agent: /dg-publish
     Implementer Agent->>GitHub: Opens PR
+    Me->>GitHub: Refine description and set as ready for review
 ```
