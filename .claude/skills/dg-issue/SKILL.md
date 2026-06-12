@@ -68,7 +68,7 @@ Present to the user:
 Post as an issue comment:
 
 ```sh
-cat > /tmp/gh-comment.md << 'DG_EOF'
+cat > /tmp/dg-comment.md << 'DG_EOF'
 <!-- dg-assessment -->
 ## Issue Assessment
 
@@ -77,7 +77,7 @@ cat > /tmp/gh-comment.md << 'DG_EOF'
 ---
 *Automated assessment by doppelganger*
 DG_EOF
-dg issue comment <number> < /tmp/gh-comment.md
+dg issue comment <number> < /tmp/dg-comment.md
 ```
 
 Update task: post → completed.
@@ -112,11 +112,11 @@ Present the draft to the user for approval.
 
 ### Step 3: Create the issue
 
-```bash
-cat > /tmp/gh-body.md << 'DG_EOF'
+```sh
+cat > /tmp/dg-body.md << 'DG_EOF'
 <body>
 DG_EOF
-dg issue create --name "<title>" < /tmp/gh-body.md
+dg issue create --name "<title>" < /tmp/dg-body.md
 ```
 
-Report the issue number and URL. Suggest next step: `/skill:dg-plan <number>`
+Report the issue number and URL. Suggest next step: `/dg-plan <number>`

@@ -93,7 +93,7 @@ cat > /tmp/dg-plan.md << 'DG_EOF'
 ---
 *Plan created by doppelganger*
 DG_EOF
-dg branch create <issue-number> < /tmp/gh-comment.md
+dg branch create <issue-number> < /tmp/dg-plan.md
 ```
 
 Update task: branch → completed.
