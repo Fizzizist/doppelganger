@@ -27,12 +27,20 @@ name = "doppelganger"
 # [profiles.ci]
 # name = "CI Bot"
 # email = "ci@example.com"
+
+# [github]
+# token = "ghp_xxxxxxxxxxxx"
 "#;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AuthorProfile {
     pub name: String,
     pub email: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct GitHubConfig {
+    pub token: String,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -43,6 +51,7 @@ pub struct Config {
     pub profiles: HashMap<String, AuthorProfile>,
     #[serde(default = "default_editor")]
     pub editor: String,
+    pub github: Option<GitHubConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -235,6 +244,7 @@ email = "ci@example.com"
             }),
             profiles: HashMap::new(),
             editor: default_editor(),
+            github: None,
         };
         let (name, email) = config.resolve(AuthorSelection::Robot).expect("resolve");
         assert_eq!(name, "Bot");
@@ -251,6 +261,7 @@ email = "ci@example.com"
             default_robot_author: None,
             profiles: HashMap::new(),
             editor: default_editor(),
+            github: None,
         };
         let (name, email) = config.resolve(AuthorSelection::Human).expect("resolve");
         assert_eq!(name, "Alice");
@@ -267,6 +278,7 @@ email = "ci@example.com"
             default_robot_author: None,
             profiles: HashMap::new(),
             editor: default_editor(),
+            github: None,
         };
         let (name1, _) = config
             .resolve(AuthorSelection::Human)
@@ -292,6 +304,7 @@ email = "ci@example.com"
             default_robot_author: None,
             profiles,
             editor: default_editor(),
+            github: None,
         };
         let (name, email) = config
             .resolve(AuthorSelection::Named("ci".to_string()))
@@ -375,9 +388,44 @@ name = "Sneaky"
             default_human_author: None,
             profiles: HashMap::new(),
             editor: default_editor(),
+            github: None,
         };
         let (_, email) = config.resolve(AuthorSelection::Robot).expect("resolve");
         assert_eq!(email, None);
+    }
+
+    #[test]
+    fn config_with_github_token() {
+        let toml = r#"
+[default_human_author]
+name = "Alice"
+email = "alice@example.com"
+
+[default_robot_author]
+name = "Bot"
+
+[github]
+token = "ghp_test123"
+"#;
+        let config: Config = toml::from_str(toml).expect("parse");
+        assert_eq!(
+            config.github.as_ref().map(|g| g.token.as_str()),
+            Some("ghp_test123")
+        );
+    }
+
+    #[test]
+    fn config_without_github_section() {
+        let toml = r#"
+[default_human_author]
+name = "Alice"
+email = "alice@example.com"
+
+[default_robot_author]
+name = "Bot"
+"#;
+        let config: Config = toml::from_str(toml).expect("parse");
+        assert!(config.github.is_none());
     }
 
     #[test]

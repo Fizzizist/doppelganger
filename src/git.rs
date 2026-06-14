@@ -16,3 +16,11 @@ pub fn current_branch(repo: &git2::Repository) -> crate::error::Result<String> {
     let shorthand = head.shorthand()?;
     Ok(shorthand.to_string())
 }
+
+pub fn remote_url(repo: &git2::Repository) -> crate::error::Result<String> {
+    let remote = repo
+        .find_remote("origin")
+        .map_err(|e| crate::error::Error::Remote(format!("failed to find origin remote: {e}")))?;
+    let url = remote.url().map_err(|_| crate::error::Error::NoRemote)?;
+    Ok(url.to_string())
+}

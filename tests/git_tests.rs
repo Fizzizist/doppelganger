@@ -3,7 +3,7 @@ mod common;
 use std::sync::OnceLock;
 
 use common::TestRepo;
-use doppelganger::git::{current_branch, discover_repo};
+use doppelganger::git::{current_branch, discover_repo, remote_url};
 use tempfile::TempDir;
 
 /// Point libgit2's global/system/XDG config search paths at an empty directory
@@ -100,4 +100,24 @@ async fn current_branch_detached_head_errors() {
         Err(e) => panic!("expected DetachedHead, got: {e}"),
         Ok(name) => panic!("expected DetachedHead, got branch name: {name}"),
     }
+}
+
+#[tokio::test]
+async fn remote_url_returns_origin_url() {
+    isolate_git_config();
+    let repo_dir = TestRepo::new_with_commit();
+    let repo = git2::Repository::open(&repo_dir.path).expect("open repo");
+    repo.remote("origin", "https://github.com/owner/repo.git")
+        .expect("add remote");
+    let url = remote_url(&repo).expect("get remote url");
+    assert_eq!(url, "https://github.com/owner/repo.git");
+}
+
+#[tokio::test]
+async fn remote_url_errors_without_origin() {
+    isolate_git_config();
+    let repo_dir = TestRepo::new_with_commit();
+    let repo = git2::Repository::open(&repo_dir.path).expect("open repo");
+    let result = remote_url(&repo);
+    assert!(result.is_err(), "should fail without origin remote");
 }

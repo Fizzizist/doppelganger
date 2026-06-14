@@ -72,6 +72,8 @@ async fn run() -> doppelganger::error::Result<RunOutcome> {
                         let dispatch = commands::issue::handle(
                             other_command,
                             &db,
+                            &config,
+                            &repo,
                             &author_name,
                             author_email.as_deref(),
                         )

@@ -101,6 +101,7 @@ mod tests {
                 author: "Alice".to_string(),
                 created_at: "2025-01-01 00:00:00".to_string(),
                 updated_at: "2025-01-01 00:00:00".to_string(),
+                remote_id: None,
             },
             crate::db::models::Issue {
                 issue_id: 2,
@@ -109,6 +110,7 @@ mod tests {
                 author: "Bob".to_string(),
                 created_at: "2025-01-01 00:00:00".to_string(),
                 updated_at: "2025-01-01 00:00:00".to_string(),
+                remote_id: None,
             },
         ]
     }
