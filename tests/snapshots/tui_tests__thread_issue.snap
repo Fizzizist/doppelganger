@@ -21,8 +21,7 @@ Fix is in progress
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-j/k: scroll  Ctrl+u/Ctrl+d: page  h/q/Esc: back
+┌ Comment ─────────────────────────────────────────────────────────────────────┐
+│Ctrl+W j to comment                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+j/k: scroll  Ctrl+u/Ctrl+d: page  h/q/Esc: back  Ctrl+W: switch pane

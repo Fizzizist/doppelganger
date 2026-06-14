@@ -2,15 +2,10 @@
 source: tests/tui_tests.rs
 expression: output
 ---
-#1 feature/dark-mode  Alice  2025-01-02 12:00:00                                
+#1 Test issue  Alice  2025-01-02 12:00:00                                       
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-Implement the dark theme toggle.                                                
-                                                                                
-See design doc for details.                                                     
-                                                                                
-Bob 2025-01-01 10:00:00                                                         
-Looking good                                                                    
+Description                                                                     
                                                                                 
                                                                                 
                                                                                 
@@ -21,7 +16,12 @@ Looking good
                                                                                 
                                                                                 
                                                                                 
-┌ Comment ─────────────────────────────────────────────────────────────────────┐
-│Ctrl+W j to comment                                                           │
+                                                                                
+                                                                                
+                                                                                
+┌ Comment (Esc to cancel, Enter to submit) ────────────────────────────────────┐
+│Line one                                                                      │
+│Line two                                                                      │
+│Line three                                                                    │
 └──────────────────────────────────────────────────────────────────────────────┘
-j/k: scroll  Ctrl+u/Ctrl+d: page  h/q/Esc: back  Ctrl+W: switch pane
+vim: edit  Esc: cancel  Enter: submit  Ctrl+W k: thread
