@@ -99,7 +99,7 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
     let help_text = if matches!(app.focus, Focus::Thread) {
         "j/k: scroll  Ctrl+u/Ctrl+d: page  h/q/Esc: back  Ctrl+W: switch pane"
     } else {
-        "vim: edit  Esc: cancel  Enter: submit  Ctrl+W k: thread"
+        "i: insert  Esc: normal  Enter(normal): submit  Ctrl+W k: thread"
     };
     let help = Paragraph::new(help_text).style(Style::default().fg(Color::DarkGray));
     f.render_widget(help, chunks[3]);

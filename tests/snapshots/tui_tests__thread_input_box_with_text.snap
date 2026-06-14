@@ -21,7 +21,7 @@ Description
                                                                                 
                                                                                 
                                                                                 
-┌ Comment (Esc to cancel, Enter to submit) ────────────────────────────────────┐
+┌ Comment (i: insert, Esc: normal, Enter: submit) ─────────────────────────────┐
 │Hello world                                                                   │
 └──────────────────────────────────────────────────────────────────────────────┘
-vim: edit  Esc: cancel  Enter: submit  Ctrl+W k: thread
+i: insert  Esc: normal  Enter(normal): submit  Ctrl+W k: thread

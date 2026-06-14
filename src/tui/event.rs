@@ -115,18 +115,28 @@ fn handle_thread_focus_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers
 }
 
 fn handle_input_box_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> KeyResult {
-    if code == KeyCode::Esc {
-        app.focus_thread();
-        return KeyResult::Continue;
-    }
-
     let Some(editor) = app.input_editor.as_mut() else {
         return KeyResult::Continue;
     };
 
+    if code == KeyCode::Esc {
+        if matches!(
+            editor.vim_mode(),
+            VimMode::Insert | VimMode::Visual | VimMode::VisualLine | VimMode::VisualBlock
+        ) {
+            let planned = crossterm_key_event_to_input(KeyEvent::new(code, modifiers));
+            if let Some(input) = decode_planned_input(planned) {
+                editor.handle_input(input);
+            }
+            return KeyResult::Continue;
+        }
+        app.focus_thread();
+        return KeyResult::Continue;
+    }
+
     if code == KeyCode::Enter
         && !modifiers.contains(KeyModifiers::SHIFT)
-        && !matches!(editor.vim_mode(), VimMode::Insert)
+        && matches!(editor.vim_mode(), VimMode::Normal)
     {
         if !editor.text().trim().is_empty() {
             return KeyResult::SubmitComment;

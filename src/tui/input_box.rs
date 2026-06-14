@@ -28,7 +28,7 @@ pub fn render_input_box(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
     };
 
     let title = if focused {
-        " Comment (Esc to cancel, Enter to submit) "
+        " Comment (i: insert, Esc: normal, Enter: submit) "
     } else {
         " Comment "
     };
@@ -159,7 +159,7 @@ mod tests {
         let buf = backend.buffer();
         assert!(buf_contains(
             buf,
-            "Comment (Esc to cancel, Enter to submit)"
+            "Comment (i: insert, Esc: normal, Enter: submit)"
         ));
     }
 

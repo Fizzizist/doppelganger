@@ -421,10 +421,32 @@ mod tests {
     }
 
     #[test]
-    fn input_box_esc_returns_focus_to_thread() {
+    fn input_box_esc_in_insert_transitions_to_normal() {
         let mut app = App::new("test".to_string(), None);
         app.screen = Screen::Thread;
         app.focus_input_box();
+        assert!(matches!(
+            app.input_editor.as_ref().unwrap().vim_mode(),
+            VimMode::Insert
+        ));
+        assert!(matches!(
+            handle_key(&mut app, KeyCode::Esc, KeyModifiers::NONE),
+            KeyResult::Continue
+        ));
+        assert!(matches!(
+            app.input_editor.as_ref().unwrap().vim_mode(),
+            VimMode::Normal
+        ));
+        assert!(matches!(app.focus, Focus::InputBox));
+    }
+
+    #[test]
+    fn input_box_esc_in_normal_returns_focus_to_thread() {
+        let mut app = App::new("test".to_string(), None);
+        app.screen = Screen::Thread;
+        app.focus_input_box();
+        let editor = app.input_editor.as_mut().unwrap();
+        editor.enter_normal();
         assert!(matches!(
             handle_key(&mut app, KeyCode::Esc, KeyModifiers::NONE),
             KeyResult::Continue
