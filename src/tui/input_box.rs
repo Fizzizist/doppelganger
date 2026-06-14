@@ -1,4 +1,5 @@
 use crate::tui::app::{App, Focus};
+use hjkl_editor_tui::form::FormPalette;
 use hjkl_engine::Host;
 use hjkl_form::TextFieldEditor;
 use hjkl_form::VimMode;
@@ -20,6 +21,7 @@ pub fn max_input_box_height(total_height: u16) -> u16 {
 }
 
 pub fn render_input_box(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
+    let palette = FormPalette::dark();
     let focused = matches!(app.focus, Focus::InputBox);
 
     let border_style = if focused {
@@ -51,12 +53,11 @@ pub fn render_input_box(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
 
     let cursor = match app.input_editor.as_mut() {
         Some(editor) => {
-            editor.set_viewport_width(inner.width);
-            editor.set_viewport_height(inner.height);
+            update_viewport(editor, inner);
 
             let text = editor.text();
             let lines: Vec<Line> = if text.is_empty() && !focused {
-                vec![placeholder_line()]
+                vec![placeholder_line(&palette)]
             } else {
                 let selection = editor.editor.selection_highlight();
                 text.lines()
@@ -99,7 +100,7 @@ pub fn render_input_box(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
             cursor
         }
         None => {
-            let paragraph = Paragraph::new(vec![placeholder_line()]).block(block);
+            let paragraph = Paragraph::new(vec![placeholder_line(&palette)]).block(block);
             f.render_widget(paragraph, area);
 
             None
@@ -108,6 +109,25 @@ pub fn render_input_box(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
 
     if let Some((x, y)) = cursor {
         f.set_cursor_position(ratatui::layout::Position { x, y });
+    }
+}
+
+fn update_viewport(editor: &mut TextFieldEditor, rect: Rect) {
+    let cursor = editor.editor.buffer().cursor();
+    let v = editor.editor.host_mut().viewport_mut();
+    v.width = rect.width;
+    v.height = rect.height;
+    if cursor.col < v.top_col {
+        v.top_col = cursor.col;
+    }
+    if rect.width > 0 && cursor.col >= v.top_col + rect.width as usize {
+        v.top_col = cursor.col + 1 - rect.width as usize;
+    }
+    if cursor.row < v.top_row {
+        v.top_row = cursor.row;
+    }
+    if rect.height > 0 && cursor.row >= v.top_row + rect.height as usize {
+        v.top_row = cursor.row + 1 - rect.height as usize;
     }
 }
 
@@ -144,13 +164,8 @@ fn make_selection_line(text: &str, col_start: usize, col_end: usize) -> Line<'st
     }
 }
 
-fn placeholder_line() -> Line<'static> {
-    Line::from(Span::styled(
-        "Ctrl+W j to comment",
-        Style::default()
-            .fg(Color::DarkGray)
-            .add_modifier(Modifier::ITALIC),
-    ))
+fn placeholder_line(palette: &FormPalette) -> Line<'static> {
+    Line::from(Span::styled("Ctrl+W j to comment", palette.placeholder))
 }
 
 fn cursor_xy(editor: &TextFieldEditor, rect: Rect) -> Option<(u16, u16)> {
@@ -222,6 +237,22 @@ mod tests {
         let backend = backend_for(app, 50, 10);
         let buf = backend.buffer();
         assert!(buf_contains(buf, "[INSERT]"));
+    }
+
+    #[test]
+    fn viewport_scrolls_to_keep_cursor_visible() {
+        let mut editor = TextFieldEditor::new(false);
+        editor.set_text(&"line\n".repeat(20));
+        let rect = Rect::new(0, 0, 40, 3);
+        update_viewport(&mut editor, rect);
+        let v = editor.editor.host().viewport();
+        assert_eq!(v.width, 40);
+        assert_eq!(v.height, 3);
+        assert!(
+            v.top_row <= 19,
+            "top_row should be clamped so cursor row 19 stays visible, got {}",
+            v.top_row
+        );
     }
 
     fn buf_contains(buf: &ratatui::buffer::Buffer, needle: &str) -> bool {
