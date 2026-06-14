@@ -84,6 +84,12 @@ async fn sync(
     gh_number: i64,
     overwrite: Option<i64>,
 ) -> Result<()> {
+    if gh_number <= 0 {
+        return Err(crate::error::Error::Validation(
+            "issue number must be a positive integer".to_string(),
+        ));
+    }
+
     let github_config = config.github.as_ref().ok_or_else(|| {
         crate::error::Error::RemoteSync(
             "GitHub token not configured; add a [github] section with token to your config"
@@ -94,7 +100,7 @@ async fn sync(
     let url = git::remote_url(repo)?;
     let (owner, repo_name) = remote::github::parse_github_remote_url(&url)?;
 
-    let provider = remote::github::GitHubProvider::new(&github_config.token, &owner, &repo_name);
+    let provider = remote::github::GitHubProvider::new(&github_config.token, &owner, &repo_name)?;
 
     let remote_issue = provider.fetch_issue(gh_number).await?;
     let conn = db.conn();
@@ -113,7 +119,7 @@ async fn sync(
         )
         .await?;
 
-        delete_issue_comments(conn, existing.issue_id).await?;
+        comment::delete_issue_comments(conn, existing.issue_id).await?;
         for c in &remote_issue.comments {
             let comment_author = author::find_or_create(conn, &c.author, None).await?;
             comment::create_issue_comment(
@@ -158,13 +164,4 @@ async fn sync(
             comments,
         })
     }
-}
-
-async fn delete_issue_comments(conn: &turso::Connection, issue_id: i64) -> Result<()> {
-    conn.execute(
-        "DELETE FROM issue_comment WHERE issue_id = ?1",
-        turso::params::Params::Positional(vec![turso::Value::Integer(issue_id)]),
-    )
-    .await?;
-    Ok(())
 }

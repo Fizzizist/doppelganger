@@ -395,6 +395,40 @@ name = "Sneaky"
     }
 
     #[test]
+    fn config_with_github_token() {
+        let toml = r#"
+[default_human_author]
+name = "Alice"
+email = "alice@example.com"
+
+[default_robot_author]
+name = "Bot"
+
+[github]
+token = "ghp_test123"
+"#;
+        let config: Config = toml::from_str(toml).expect("parse");
+        assert_eq!(
+            config.github.as_ref().map(|g| g.token.as_str()),
+            Some("ghp_test123")
+        );
+    }
+
+    #[test]
+    fn config_without_github_section() {
+        let toml = r#"
+[default_human_author]
+name = "Alice"
+email = "alice@example.com"
+
+[default_robot_author]
+name = "Bot"
+"#;
+        let config: Config = toml::from_str(toml).expect("parse");
+        assert!(config.github.is_none());
+    }
+
+    #[test]
     fn config_without_editor_defaults_to_nvim() {
         let toml = r#"
 [default_human_author]

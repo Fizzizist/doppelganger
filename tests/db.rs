@@ -416,6 +416,7 @@ async fn issue_get_by_remote_id() {
         .await
         .expect("get by remote_id");
     assert_eq!(found.name.as_deref(), Some("Remote"));
+    assert_eq!(found.remote_id, Some("gh:owner/repo#7".to_string()));
 }
 
 #[tokio::test]
@@ -459,7 +460,46 @@ async fn issue_update_for_sync() {
 
     assert_eq!(updated.name.as_deref(), Some("Synced Title"));
     assert_eq!(updated.description, "synced body");
+    assert_eq!(updated.author, "SyncAuthor");
     assert_eq!(updated.remote_id, Some("gh:owner/repo#1".to_string()));
+}
+
+#[tokio::test]
+async fn migration_adds_remote_id_to_existing_db() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let db_path = tmp.path().join("legacy.db");
+    let db_path_str = db_path.to_str().expect("valid path");
+
+    {
+        let db = Database::open(db_path_str).await.expect("open db");
+        let conn = db.conn();
+        let author = author::find_or_create(conn, "LegacyTest", None)
+            .await
+            .expect("create author");
+        let created = issue::create(conn, Some("Legacy Issue"), "body", author.author_id, None)
+            .await
+            .expect("create issue");
+        assert_eq!(created.remote_id, None);
+        db.checkpoint().await.expect("checkpoint");
+    }
+
+    {
+        let db = Database::open(db_path_str).await.expect("reopen db");
+        let conn = db.conn();
+        let author = author::find_or_create(conn, "LegacyTest", None)
+            .await
+            .expect("find author");
+        let created = issue::create(
+            conn,
+            Some("With Remote"),
+            "body",
+            author.author_id,
+            Some("gh:owner/repo#1"),
+        )
+        .await
+        .expect("create issue with remote_id");
+        assert_eq!(created.remote_id, Some("gh:owner/repo#1".to_string()));
+    }
 }
 
 #[tokio::test]
