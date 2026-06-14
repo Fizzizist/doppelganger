@@ -102,7 +102,7 @@ Closes #<remote_issue_id>
 
 # Local Testing Instructions
 
-<list of instructions for a _human_ reviewer to take to reproduce the behavior locally>
+<list of instructions for a _human_ reviewer to take to _reproduce_ the behavior locally. *Do not include instructions for running the test suite*.>
 
 MACH6_EOF
 gh pr create --title "<title>" --body-file /tmp/gh-body.md
