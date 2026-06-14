@@ -67,7 +67,10 @@ impl Provider for GitHubProvider {
 
         let comments = comments.into_iter().collect::<Result<Vec<_>>>()?;
 
+        let remote_id = format!("gh:{}/{}#{}", self.owner, self.repo, issue_number);
+
         Ok(RemoteIssue {
+            remote_id,
             title,
             body,
             author,

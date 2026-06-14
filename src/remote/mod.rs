@@ -1,6 +1,7 @@
 use crate::error::Result;
 
 pub struct RemoteIssue {
+    pub remote_id: String,
     pub title: Option<String>,
     pub body: String,
     pub author: String,

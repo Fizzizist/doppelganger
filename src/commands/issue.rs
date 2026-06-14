@@ -81,10 +81,10 @@ async fn sync(
     db: &Database,
     config: &Config,
     repo: &git2::Repository,
-    gh_number: i64,
+    issue_number: i64,
     overwrite: Option<i64>,
 ) -> Result<()> {
-    if gh_number <= 0 {
+    if issue_number <= 0 {
         return Err(crate::error::Error::Validation(
             "issue number must be a positive integer".to_string(),
         ));
@@ -102,9 +102,8 @@ async fn sync(
 
     let provider = remote::github::GitHubProvider::new(&github_config.token, &owner, &repo_name)?;
 
-    let remote_issue = provider.fetch_issue(gh_number).await?;
+    let remote_issue = provider.fetch_issue(issue_number).await?;
     let conn = db.conn();
-    let remote_id = format!("gh:{owner}/{repo_name}#{gh_number}");
 
     if let Some(local_id) = overwrite {
         let existing = issue::get_by_id(conn, local_id).await?;
@@ -115,7 +114,7 @@ async fn sync(
             remote_issue.title.as_deref(),
             &remote_issue.body,
             sync_author.author_id,
-            Some(&remote_id),
+            Some(&remote_issue.remote_id),
         )
         .await?;
 
@@ -143,7 +142,7 @@ async fn sync(
             remote_issue.title.as_deref(),
             &remote_issue.body,
             sync_author.author_id,
-            Some(&remote_id),
+            Some(&remote_issue.remote_id),
         )
         .await?;
 
