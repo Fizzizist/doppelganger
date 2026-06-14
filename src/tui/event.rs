@@ -134,10 +134,7 @@ fn handle_input_box_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -
         return KeyResult::Continue;
     }
 
-    if code == KeyCode::Enter
-        && !modifiers.contains(KeyModifiers::SHIFT)
-        && matches!(editor.vim_mode(), VimMode::Normal)
-    {
+    if code == KeyCode::Enter && matches!(editor.vim_mode(), VimMode::Normal) {
         if !editor.text().trim().is_empty() {
             return KeyResult::SubmitComment;
         }
