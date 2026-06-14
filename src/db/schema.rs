@@ -45,3 +45,5 @@ CREATE TABLE IF NOT EXISTS branch_comment (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )"#;
+
+pub const ALTER_TABLE_ISSUE_REMOTE_ID: &str = "ALTER TABLE issue ADD COLUMN remote_id TEXT";

@@ -18,6 +18,15 @@ SELECT branch_comment.branch_comment_id, branch_comment.content, author.name,
 FROM branch_comment JOIN author ON branch_comment.author_id = author.author_id
 "#;
 
+pub async fn delete_issue_comments(conn: &turso::Connection, issue_id: i64) -> Result<()> {
+    conn.execute(
+        "DELETE FROM issue_comment WHERE issue_id = ?1",
+        turso::params::Params::Positional(vec![Value::Integer(issue_id)]),
+    )
+    .await?;
+    Ok(())
+}
+
 pub async fn create_issue_comment(
     conn: &turso::Connection,
     issue_id: i64,

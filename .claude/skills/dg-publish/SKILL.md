@@ -10,7 +10,6 @@ description: "Pre-merge checks, version bump, create PR/MR. Version bump happens
 ## Global Rules
 
 1. **Doppelganger as shared memory** — Plans, reviews, assessments, and progress are written as branch/issue comments so any future session can pick up context.
-2. **No `#N` in PR/MR bodies** — Use "finding 3", "item 3" etc. instead.
 3. **Safe git** — Never use `git add -A` or `git add .`. Stage files by name. Never stage secrets.
 4. **Task tracking** — Use the `update_task` tool to show progress.
 5. **Non-interactive `gh`/`glab`** — Set `GH_PAGER=cat` and `GH_EDITOR=cat` before all `gh` commands to prevent interactive prompts from hanging the agent. Use `--body-file` instead of inline `--body` for all `gh pr comment`, `gh pr create`, and `gh issue create` calls to avoid shell interpretation of backticks.
@@ -91,7 +90,7 @@ git push -u origin feature/issue-<N>-<slug>
 
 # Open PR
 cat > /tmp/gh-body.md << 'DG_EOF'
-Closes #<N>
+Closes #<remote_issue_id>
 
 # What
 
@@ -106,7 +105,7 @@ Closes #<N>
 <list of instructions for a _human_ reviewer to take to reproduce the behavior locally>
 
 MACH6_EOF
-gh pr create --draft --title "<title>" --body-file /tmp/gh-body.md
+gh pr create --title "<title>" --body-file /tmp/gh-body.md
 ```
 
 Update task: post → completed, checks → in_progress.
@@ -132,7 +131,7 @@ If there are blocking issues, report them and suggest fixes:
 
 Check for contributing guidelines first:
 ```bash
-# Read first found: CONTRIBUTING.md, DEVELOPMENT.md, .github/CONTRIBUTING.md, AGENTS.md
+# Read first found: CONTRIBUTING.md, DEVELOPMENT.md, .github/CONTRIBUTING.md, AGENTS.md, CLAUDE.md
 ```
 
 Then check if these need attention:

@@ -66,7 +66,20 @@ impl Database {
         self.conn.execute(schema::BRANCH_TABLE, ()).await?;
         self.conn.execute(schema::ISSUE_COMMENT_TABLE, ()).await?;
         self.conn.execute(schema::BRANCH_COMMENT_TABLE, ()).await?;
+        self.migrate_remote_id().await?;
         Ok(())
+    }
+
+    async fn migrate_remote_id(&self) -> Result<()> {
+        match self
+            .conn
+            .execute(schema::ALTER_TABLE_ISSUE_REMOTE_ID, ())
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) if e.to_string().contains("duplicate column name") => Ok(()),
+            Err(e) => Err(classify_db_error(e)),
+        }
     }
 
     pub async fn checkpoint(&self) -> Result<()> {
