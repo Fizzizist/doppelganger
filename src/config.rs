@@ -27,12 +27,20 @@ name = "doppelganger"
 # [profiles.ci]
 # name = "CI Bot"
 # email = "ci@example.com"
+
+# [github]
+# token = "ghp_xxxxxxxxxxxx"
 "#;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AuthorProfile {
     pub name: String,
     pub email: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct GitHubConfig {
+    pub token: String,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -43,6 +51,7 @@ pub struct Config {
     pub profiles: HashMap<String, AuthorProfile>,
     #[serde(default = "default_editor")]
     pub editor: String,
+    pub github: Option<GitHubConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -235,6 +244,7 @@ email = "ci@example.com"
             }),
             profiles: HashMap::new(),
             editor: default_editor(),
+            github: None,
         };
         let (name, email) = config.resolve(AuthorSelection::Robot).expect("resolve");
         assert_eq!(name, "Bot");
@@ -251,6 +261,7 @@ email = "ci@example.com"
             default_robot_author: None,
             profiles: HashMap::new(),
             editor: default_editor(),
+            github: None,
         };
         let (name, email) = config.resolve(AuthorSelection::Human).expect("resolve");
         assert_eq!(name, "Alice");
@@ -267,6 +278,7 @@ email = "ci@example.com"
             default_robot_author: None,
             profiles: HashMap::new(),
             editor: default_editor(),
+            github: None,
         };
         let (name1, _) = config
             .resolve(AuthorSelection::Human)
@@ -292,6 +304,7 @@ email = "ci@example.com"
             default_robot_author: None,
             profiles,
             editor: default_editor(),
+            github: None,
         };
         let (name, email) = config
             .resolve(AuthorSelection::Named("ci".to_string()))
@@ -375,6 +388,7 @@ name = "Sneaky"
             default_human_author: None,
             profiles: HashMap::new(),
             editor: default_editor(),
+            github: None,
         };
         let (_, email) = config.resolve(AuthorSelection::Robot).expect("resolve");
         assert_eq!(email, None);

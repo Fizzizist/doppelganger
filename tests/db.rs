@@ -51,7 +51,7 @@ async fn issue_create_and_get() {
         .expect("create author");
 
     let desc = "A description without a name";
-    let created = issue::create(conn, None, desc, author.author_id)
+    let created = issue::create(conn, None, desc, author.author_id, None)
         .await
         .expect("create issue without name");
 
@@ -59,7 +59,7 @@ async fn issue_create_and_get() {
     assert_eq!(created.description, desc);
     assert_eq!(created.author, author.name);
 
-    let created_named = issue::create(conn, Some("My Issue"), desc, author.author_id)
+    let created_named = issue::create(conn, Some("My Issue"), desc, author.author_id, None)
         .await
         .expect("create issue with name");
 
@@ -96,7 +96,7 @@ async fn branch_create_and_get_by_name() {
     let author = author::find_or_create(conn, "Dev", Some("dev@x.com"))
         .await
         .expect("create author");
-    let iss = issue::create(conn, None, "Fix bug", author.author_id)
+    let iss = issue::create(conn, None, "Fix bug", author.author_id, None)
         .await
         .expect("create issue");
 
@@ -121,7 +121,7 @@ async fn branch_create_duplicate_error() {
     let author = author::find_or_create(conn, "Dev", Some("dev@x.com"))
         .await
         .expect("create author");
-    let iss = issue::create(conn, None, "Fix bug", author.author_id)
+    let iss = issue::create(conn, None, "Fix bug", author.author_id, None)
         .await
         .expect("create issue");
 
@@ -147,7 +147,7 @@ async fn branch_overwrite_via_update() {
     let author = author::find_or_create(conn, "Dev", Some("dev@x.com"))
         .await
         .expect("create author");
-    let iss = issue::create(conn, None, "Fix bug", author.author_id)
+    let iss = issue::create(conn, None, "Fix bug", author.author_id, None)
         .await
         .expect("create issue");
 
@@ -191,7 +191,7 @@ async fn issue_comments_create_and_list() {
     let author = author::find_or_create(conn, "Alice", Some("a@b.com"))
         .await
         .expect("create author");
-    let iss = issue::create(conn, None, "Issue", author.author_id)
+    let iss = issue::create(conn, None, "Issue", author.author_id, None)
         .await
         .expect("create issue");
 
@@ -219,7 +219,7 @@ async fn branch_comments_create_and_list() {
     let author = author::find_or_create(conn, "Alice", Some("a@b.com"))
         .await
         .expect("create author");
-    let iss = issue::create(conn, None, "Issue", author.author_id)
+    let iss = issue::create(conn, None, "Issue", author.author_id, None)
         .await
         .expect("create issue");
     let br = branch::create(conn, "feature", "desc", author.author_id, iss.issue_id)
@@ -275,7 +275,7 @@ async fn checkpoint_truncates_wal_and_persists_data() {
         let author = author::find_or_create(conn, "Checker", Some("c@d.com"))
             .await
             .expect("create author");
-        let created = issue::create(conn, None, "checkpoint issue", author.author_id)
+        let created = issue::create(conn, None, "checkpoint issue", author.author_id, None)
             .await
             .expect("create issue");
 
@@ -318,13 +318,13 @@ async fn issue_list_returns_ordered_by_updated_at_desc() {
         .await
         .expect("create author");
 
-    let first = issue::create(conn, None, "first issue", author.author_id)
+    let first = issue::create(conn, None, "first issue", author.author_id, None)
         .await
         .expect("create first");
-    let second = issue::create(conn, None, "second issue", author.author_id)
+    let second = issue::create(conn, None, "second issue", author.author_id, None)
         .await
         .expect("create second");
-    let third = issue::create(conn, None, "third issue", author.author_id)
+    let third = issue::create(conn, None, "third issue", author.author_id, None)
         .await
         .expect("create third");
 
@@ -350,7 +350,7 @@ async fn fingerprint_differs_after_insert() {
         .collect::<Vec<_>>()
         .join(",");
 
-    issue::create(conn, None, "new issue", author.author_id)
+    issue::create(conn, None, "new issue", author.author_id, None)
         .await
         .expect("create issue");
 
@@ -362,4 +362,108 @@ async fn fingerprint_differs_after_insert() {
         .join(",");
 
     assert_ne!(fp1, fp2, "fingerprint should differ after insert");
+}
+
+#[tokio::test]
+async fn issue_create_with_remote_id() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+    let author = author::find_or_create(conn, "Author", Some("a@b.com"))
+        .await
+        .expect("create author");
+    let created = issue::create(
+        conn,
+        Some("Remote Issue"),
+        "desc",
+        author.author_id,
+        Some("gh:owner/repo#42"),
+    )
+    .await
+    .expect("create issue with remote_id");
+    assert_eq!(created.remote_id, Some("gh:owner/repo#42".to_string()));
+}
+
+#[tokio::test]
+async fn issue_create_without_remote_id() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+    let author = author::find_or_create(conn, "Author", Some("a@b.com"))
+        .await
+        .expect("create author");
+    let created = issue::create(conn, None, "local issue", author.author_id, None)
+        .await
+        .expect("create issue without remote_id");
+    assert_eq!(created.remote_id, None);
+}
+
+#[tokio::test]
+async fn issue_get_by_remote_id() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+    let author = author::find_or_create(conn, "Author", Some("a@b.com"))
+        .await
+        .expect("create author");
+    issue::create(
+        conn,
+        Some("Remote"),
+        "desc",
+        author.author_id,
+        Some("gh:owner/repo#7"),
+    )
+    .await
+    .expect("create issue");
+    let found = issue::get_by_remote_id(conn, "gh:owner/repo#7")
+        .await
+        .expect("get by remote_id");
+    assert_eq!(found.name.as_deref(), Some("Remote"));
+}
+
+#[tokio::test]
+async fn issue_get_by_remote_id_not_found() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+    let result = issue::get_by_remote_id(conn, "gh:nonexistent/repo#999").await;
+    assert!(result.is_err(), "should error for nonexistent remote_id");
+}
+
+#[tokio::test]
+async fn issue_update_for_sync() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+    let author = author::find_or_create(conn, "Original", Some("a@b.com"))
+        .await
+        .expect("create author");
+    let created = issue::create(
+        conn,
+        Some("Original Title"),
+        "original body",
+        author.author_id,
+        None,
+    )
+    .await
+    .expect("create issue");
+
+    let new_author = author::find_or_create(conn, "SyncAuthor", None)
+        .await
+        .expect("create sync author");
+    let updated = issue::update_for_sync(
+        conn,
+        created.issue_id,
+        Some("Synced Title"),
+        "synced body",
+        new_author.author_id,
+        Some("gh:owner/repo#1"),
+    )
+    .await
+    .expect("update for sync");
+
+    assert_eq!(updated.name.as_deref(), Some("Synced Title"));
+    assert_eq!(updated.description, "synced body");
+    assert_eq!(updated.remote_id, Some("gh:owner/repo#1".to_string()));
+}
+
+#[tokio::test]
+async fn migration_remote_id_is_idempotent() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    db.migrate().await.expect("second migrate should succeed");
 }

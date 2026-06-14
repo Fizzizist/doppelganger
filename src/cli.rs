@@ -62,6 +62,11 @@ pub enum IssueCommands {
         issue_number: i64,
         content: Option<String>,
     },
+    Sync {
+        issue_number: i64,
+        #[arg(long)]
+        overwrite: Option<i64>,
+    },
     Tui,
 }
 

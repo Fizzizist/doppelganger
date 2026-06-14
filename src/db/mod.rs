@@ -66,6 +66,28 @@ impl Database {
         self.conn.execute(schema::BRANCH_TABLE, ()).await?;
         self.conn.execute(schema::ISSUE_COMMENT_TABLE, ()).await?;
         self.conn.execute(schema::BRANCH_COMMENT_TABLE, ()).await?;
+        self.migrate_remote_id().await?;
+        Ok(())
+    }
+
+    async fn migrate_remote_id(&self) -> Result<()> {
+        let mut rows = self.conn.query("PRAGMA table_info(issue)", ()).await?;
+        let mut has_remote_id = false;
+        while let Some(row) = rows.next().await? {
+            let col_name = match row.get_value(1)? {
+                turso::Value::Text(s) => s,
+                _ => continue,
+            };
+            if col_name == "remote_id" {
+                has_remote_id = true;
+                break;
+            }
+        }
+        if !has_remote_id {
+            self.conn
+                .execute(schema::ALTER_TABLE_ISSUE_REMOTE_ID, ())
+                .await?;
+        }
         Ok(())
     }
 

@@ -11,18 +11,24 @@ pub async fn create(
     name: Option<&str>,
     description: &str,
     author_id: i64,
+    remote_id: Option<&str>,
 ) -> Result<Issue> {
     let name_value = match name {
         Some(n) => Value::Text(n.to_string()),
         None => Value::Null,
     };
+    let remote_id_value = match remote_id {
+        Some(r) => Value::Text(r.to_string()),
+        None => Value::Null,
+    };
 
     conn.execute(
-        "INSERT INTO issue (name, description, author_id) VALUES (?1, ?2, ?3)",
+        "INSERT INTO issue (name, description, author_id, remote_id) VALUES (?1, ?2, ?3, ?4)",
         turso::params::Params::Positional(vec![
             name_value,
             Value::Text(description.to_string()),
             Value::Integer(author_id),
+            remote_id_value,
         ]),
     )
     .await?;
@@ -35,7 +41,7 @@ pub async fn get_by_id(conn: &turso::Connection, issue_id: i64) -> Result<Issue>
     let mut rows = conn
         .query(
             "SELECT issue.issue_id, issue.name, issue.description, author.name, \
-             issue.created_at, issue.updated_at \
+             issue.created_at, issue.updated_at, issue.remote_id \
              FROM issue JOIN author ON issue.author_id = author.author_id \
              WHERE issue.issue_id = ?1",
             turso::params::Params::Positional(vec![Value::Integer(issue_id)]),
@@ -52,7 +58,7 @@ pub async fn list(conn: &turso::Connection) -> Result<Vec<Issue>> {
     let mut rows = conn
         .query(
             "SELECT issue.issue_id, issue.name, issue.description, author.name, \
-             issue.created_at, issue.updated_at \
+             issue.created_at, issue.updated_at, issue.remote_id \
              FROM issue JOIN author ON issue.author_id = author.author_id \
              ORDER BY issue.updated_at DESC, issue.issue_id DESC",
             (),
@@ -66,6 +72,58 @@ pub async fn list(conn: &turso::Connection) -> Result<Vec<Issue>> {
     Ok(issues)
 }
 
+pub async fn get_by_remote_id(conn: &turso::Connection, remote_id: &str) -> Result<Issue> {
+    let mut rows = conn
+        .query(
+            "SELECT issue.issue_id, issue.name, issue.description, author.name, \
+             issue.created_at, issue.updated_at, issue.remote_id \
+             FROM issue JOIN author ON issue.author_id = author.author_id \
+             WHERE issue.remote_id = ?1",
+            turso::params::Params::Positional(vec![Value::Text(remote_id.to_string())]),
+        )
+        .await?;
+
+    match rows.next().await? {
+        Some(row) => row_to_issue(&row),
+        None => Err(Error::RemoteSync(format!(
+            "no issue with remote_id '{remote_id}'"
+        ))),
+    }
+}
+
+pub async fn update_for_sync(
+    conn: &turso::Connection,
+    issue_id: i64,
+    name: Option<&str>,
+    description: &str,
+    author_id: i64,
+    remote_id: Option<&str>,
+) -> Result<Issue> {
+    let name_value = match name {
+        Some(n) => Value::Text(n.to_string()),
+        None => Value::Null,
+    };
+    let remote_id_value = match remote_id {
+        Some(r) => Value::Text(r.to_string()),
+        None => Value::Null,
+    };
+
+    conn.execute(
+        "UPDATE issue SET name = ?1, description = ?2, author_id = ?3, remote_id = ?4, \
+         updated_at = datetime('now') WHERE issue_id = ?5",
+        turso::params::Params::Positional(vec![
+            name_value,
+            Value::Text(description.to_string()),
+            Value::Integer(author_id),
+            remote_id_value,
+            Value::Integer(issue_id),
+        ]),
+    )
+    .await?;
+
+    get_by_id(conn, issue_id).await
+}
+
 fn row_to_issue(row: &turso::Row) -> Result<Issue> {
     Ok(Issue {
         issue_id: extract_int(row, 0)?,
@@ -74,5 +132,6 @@ fn row_to_issue(row: &turso::Row) -> Result<Issue> {
         author: extract_text(row, 3)?,
         created_at: extract_text(row, 4)?,
         updated_at: extract_text(row, 5)?,
+        remote_id: extract_optional_text(row, 6)?,
     })
 }

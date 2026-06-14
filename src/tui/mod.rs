@@ -141,9 +141,14 @@ async fn handle_key_event(
                         app.author_email.as_deref(),
                     )
                     .await?;
-                    let created =
-                        crate::db::issue::create(conn, name_opt, &description, author.author_id)
-                            .await?;
+                    let created = crate::db::issue::create(
+                        conn,
+                        name_opt,
+                        &description,
+                        author.author_id,
+                        None,
+                    )
+                    .await?;
                     db.checkpoint().await?;
                     drop(db);
 

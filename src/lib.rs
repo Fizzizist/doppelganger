@@ -7,4 +7,5 @@ pub mod git;
 pub mod input;
 pub mod logging;
 pub mod output;
+pub mod remote;
 pub mod tui;

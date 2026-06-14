@@ -52,6 +52,15 @@ pub enum Error {
 
     #[error("tui error: {0}")]
     Tui(String),
+
+    #[error("remote error: {0}")]
+    Remote(String),
+
+    #[error("no git remote 'origin' found or not a GitHub repository")]
+    NoRemote,
+
+    #[error("remote sync error: {0}")]
+    RemoteSync(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
