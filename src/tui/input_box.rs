@@ -72,7 +72,7 @@ pub fn render_input_box(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
                                     0
                                 };
                                 let col_end = if row == sel_end {
-                                    sel.range.end.col as usize
+                                    (sel.range.end.col as usize).saturating_add(1)
                                 } else {
                                     line.chars().count()
                                 };
