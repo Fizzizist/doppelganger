@@ -3,10 +3,9 @@ use crate::{
     config::Config,
     db::{Database, author, comment, issue, models::IssueWithComments},
     error::Result,
-    git,
     input::resolve_content,
     output::print_json,
-    remote::{self, Provider},
+    remote,
 };
 
 pub async fn handle(
@@ -90,18 +89,7 @@ async fn sync(
         ));
     }
 
-    let github_config = config.github.as_ref().ok_or_else(|| {
-        crate::error::Error::RemoteSync(
-            "GitHub token not configured; add a [github] section with token to your config"
-                .to_string(),
-        )
-    })?;
-
-    let url = git::remote_url(repo)?;
-    let (owner, repo_name) = remote::github::parse_github_remote_url(&url)?;
-
-    let provider = remote::github::GitHubProvider::new(&github_config.token, &owner, &repo_name)?;
-
+    let provider = remote::provider_from_config(config, repo)?;
     let remote_issue = provider.fetch_issue(issue_number).await?;
     let conn = db.conn();
 
