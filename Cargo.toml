@@ -21,7 +21,7 @@ serde_json = "1.0.150"
 syntect = "5.3.0"
 syntect-assets = "0.23.6"
 tempfile = "3.27.0"
-the-other-tui-markdown = "0.1.0"
+the-other-tui-markdown = { git = "https://github.com/Fizzizist/the-other-tui-markdown.git", branch = "main", version = "0.1.0" }
 thiserror = "2.0.18"
 tokio = { version = "1.52.3", features = ["full"] }
 toml = "1.1.2"
