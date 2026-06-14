@@ -21,7 +21,8 @@ Description
                                                                                 
                                                                                 
                                                                                 
-┌ Comment (i: insert, Esc: normal, Enter: submit) ─────────────────────────────┐
+                                                                                
+                                                                                
+┌ Comment [NORMAL] ────────────────────────────────────────────────────────────┐
 │Hello world                                                                   │
 └──────────────────────────────────────────────────────────────────────────────┘
-i: insert  Esc: normal  Enter(normal): submit  Ctrl+W k: thread

@@ -1,4 +1,4 @@
-use crate::tui::app::{App, Focus};
+use crate::tui::app::App;
 use crate::tui::highlight::build_renderer;
 use crate::tui::input_box::{input_box_height, max_input_box_height, render_input_box};
 use ratatui::{
@@ -14,7 +14,7 @@ fn markdown_theme() -> the_other_tui_markdown::Theme {
         code_block_lang: Style::new()
             .fg(Color::DarkGray)
             .add_modifier(Modifier::ITALIC),
-        inline_code: Style::new().fg(Color::Gray),
+        inline_code: Style::default().fg(Color::Gray),
         ..the_other_tui_markdown::Theme::default()
     }
 }
@@ -32,7 +32,6 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
             Constraint::Length(3),
             Constraint::Min(0),
             Constraint::Length(input_height),
-            Constraint::Length(2),
         ])
         .split(f.area());
 
@@ -95,12 +94,4 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
     }
 
     render_input_box(f, app, chunks[2]);
-
-    let help_text = if matches!(app.focus, Focus::Thread) {
-        "j/k: scroll  Ctrl+u/Ctrl+d: page  h/q/Esc: back  Ctrl+W: switch pane"
-    } else {
-        "i: insert  Esc: normal  Enter(normal): submit  Ctrl+W k: thread"
-    };
-    let help = Paragraph::new(help_text).style(Style::default().fg(Color::DarkGray));
-    f.render_widget(help, chunks[3]);
 }

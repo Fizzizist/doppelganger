@@ -330,7 +330,7 @@ fn thread_input_box_focused() {
         .draw(|f| view::thread::render(f, &mut app))
         .expect("draw");
     let buffer = terminal.backend().buffer().clone();
-    let border_cell = buffer.cell((0, 19)).expect("cell at border");
+    let border_cell = buffer.cell((0, 21)).expect("cell at border");
     assert!(
         border_cell.style().fg == Some(ratatui::style::Color::Cyan),
         "focused input box border should be cyan, got: {:?}",
