@@ -1,10 +1,18 @@
-use crossterm::event::{KeyCode, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use hjkl_editor_tui::crossterm_key_event_to_input;
+use hjkl_engine::{VimMode, decode_planned_input};
 
 use crate::db::{Database, comment, issue};
-use crate::tui::app::{App, ModalState, Screen};
+use crate::tui::app::{App, Focus, ModalState, Screen};
 use crate::tui::model::Thread;
 
-pub fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> bool {
+pub enum KeyResult {
+    Continue,
+    Quit,
+    SubmitComment,
+}
+
+pub fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> KeyResult {
     match app.screen {
         Screen::IssueList => handle_issue_list_key(app, code, modifiers),
         Screen::Thread => handle_thread_key(app, code, modifiers),
@@ -39,44 +47,105 @@ pub fn handle_modal_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -
     }
 }
 
-fn handle_issue_list_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> bool {
+fn handle_issue_list_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> KeyResult {
     match (code, modifiers) {
-        (KeyCode::Char('q'), _) | (KeyCode::Esc, _) => true,
+        (KeyCode::Char('q'), _) | (KeyCode::Esc, _) => KeyResult::Quit,
         (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
             if !app.issues.is_empty() {
                 app.selected_issue = (app.selected_issue + 1).min(app.issues.len() - 1);
             }
-            false
+            KeyResult::Continue
         }
         (KeyCode::Char('k'), _) | (KeyCode::Up, _) => {
             if !app.issues.is_empty() {
                 app.selected_issue = app.selected_issue.saturating_sub(1);
             }
-            false
+            KeyResult::Continue
         }
         (KeyCode::Enter, _) | (KeyCode::Char('l'), _) => {
             app.select_issue();
-            false
+            KeyResult::Continue
         }
         (KeyCode::Char('n'), _) => {
             app.start_name_input();
-            false
+            KeyResult::Continue
         }
-        _ => false,
+        _ => KeyResult::Continue,
     }
 }
 
-fn handle_thread_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> bool {
+fn handle_thread_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> KeyResult {
+    if app.ctrl_w_pending {
+        app.ctrl_w_pending = false;
+        return match (code, modifiers) {
+            (KeyCode::Char('j'), _) => {
+                app.focus_input_box();
+                KeyResult::Continue
+            }
+            (KeyCode::Char('k'), _) => {
+                app.focus_thread();
+                KeyResult::Continue
+            }
+            _ => KeyResult::Continue,
+        };
+    }
+
+    if code == KeyCode::Char('w') && modifiers.contains(KeyModifiers::CONTROL) {
+        app.ctrl_w_pending = true;
+        return KeyResult::Continue;
+    }
+
+    match app.focus {
+        Focus::Thread => handle_thread_focus_key(app, code, modifiers),
+        Focus::InputBox => handle_input_box_key(app, code, modifiers),
+    }
+}
+
+fn handle_thread_focus_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> KeyResult {
     match (code, modifiers) {
         (KeyCode::Char('q'), _) | (KeyCode::Esc, _) | (KeyCode::Char('h'), _) => {
             app.back();
-            false
+            KeyResult::Continue
         }
         _ => {
             handle_thread_scroll(app, code, modifiers);
-            false
+            KeyResult::Continue
         }
     }
+}
+
+fn handle_input_box_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> KeyResult {
+    let Some(editor) = app.input_editor.as_mut() else {
+        return KeyResult::Continue;
+    };
+
+    if code == KeyCode::Esc {
+        if matches!(
+            editor.vim_mode(),
+            VimMode::Insert | VimMode::Visual | VimMode::VisualLine | VimMode::VisualBlock
+        ) {
+            let planned = crossterm_key_event_to_input(KeyEvent::new(code, modifiers));
+            if let Some(input) = decode_planned_input(planned) {
+                editor.handle_input(input);
+            }
+            return KeyResult::Continue;
+        }
+        app.focus_thread();
+        return KeyResult::Continue;
+    }
+
+    if code == KeyCode::Enter && matches!(editor.vim_mode(), VimMode::Normal) {
+        if !editor.text().trim().is_empty() {
+            return KeyResult::SubmitComment;
+        }
+        return KeyResult::Continue;
+    }
+
+    let planned = crossterm_key_event_to_input(KeyEvent::new(code, modifiers));
+    if let Some(input) = decode_planned_input(planned) {
+        editor.handle_input(input);
+    }
+    KeyResult::Continue
 }
 
 pub fn handle_thread_scroll(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {

@@ -101,7 +101,7 @@ fn thread_render_issue() {
     app.screen = Screen::Thread;
     app.thread = Some(thread);
 
-    let output = render_to_string(80, 24, |f| view::thread::render(f, &app));
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
     insta::assert_snapshot!("thread_issue", output);
 }
 
@@ -131,7 +131,7 @@ fn thread_render_branch() {
     app.screen = Screen::Thread;
     app.thread = Some(thread);
 
-    let output = render_to_string(80, 24, |f| view::thread::render(f, &app));
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
     insta::assert_snapshot!("thread_branch", output);
 }
 
@@ -153,7 +153,7 @@ fn thread_render_scroll() {
     app.thread = Some(thread);
     app.thread_scroll = 2;
 
-    let output = render_to_string(80, 10, |f| view::thread::render(f, &app));
+    let output = render_to_string(80, 10, |f| view::thread::render(f, &mut app));
     insta::assert_snapshot!("thread_scroll", output);
 }
 
@@ -240,7 +240,7 @@ fn thread_issue_number_display() {
     app.screen = Screen::Thread;
     app.thread = Some(thread);
 
-    let output = render_to_string(80, 10, |f| view::thread::render(f, &app));
+    let output = render_to_string(80, 10, |f| view::thread::render(f, &mut app));
     assert!(
         output.contains("#42"),
         "header should contain #42, got:\n{output}"
@@ -251,7 +251,7 @@ fn thread_issue_number_display() {
     let backend = ratatui::backend::TestBackend::new(80, 10);
     let mut terminal = ratatui::Terminal::new(backend).expect("terminal");
     terminal
-        .draw(|f| view::thread::render(f, &app))
+        .draw(|f| view::thread::render(f, &mut app))
         .expect("draw");
     let buffer = terminal.backend().buffer().clone();
     let hash_cell = buffer.cell((0, 0)).expect("cell at #");
@@ -306,4 +306,84 @@ fn issue_list_with_error_modal() {
         view::modal::render(f, &app);
     });
     insta::assert_snapshot!("issue_list_with_error_modal", output);
+}
+
+#[test]
+fn thread_input_box_focused() {
+    let issue = make_issue(1, Some("Test issue"), "Description", "Alice");
+    let thread = Thread::from(&IssueWithComments {
+        issue,
+        comments: Vec::new(),
+    });
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+    app.focus_input_box();
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    insta::assert_snapshot!("thread_input_box_focused", output);
+
+    let backend = ratatui::backend::TestBackend::new(80, 24);
+    let mut terminal = ratatui::Terminal::new(backend).expect("terminal");
+    terminal
+        .draw(|f| view::thread::render(f, &mut app))
+        .expect("draw");
+    let buffer = terminal.backend().buffer().clone();
+    let border_cell = buffer.cell((0, 21)).expect("cell at border");
+    assert!(
+        border_cell.style().fg == Some(ratatui::style::Color::Cyan),
+        "focused input box border should be cyan, got: {:?}",
+        border_cell.style(),
+    );
+}
+
+#[test]
+fn thread_input_box_with_text() {
+    let issue = make_issue(1, Some("Test issue"), "Description", "Alice");
+    let thread = Thread::from(&IssueWithComments {
+        issue,
+        comments: Vec::new(),
+    });
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+    app.focus_input_box();
+    let editor = app.input_editor.as_mut().expect("editor");
+    editor.set_text("Hello world");
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    assert!(
+        output.contains("Hello world"),
+        "input box should contain typed text, got:\n{output}"
+    );
+    insta::assert_snapshot!("thread_input_box_with_text", output);
+}
+
+#[test]
+fn thread_input_box_multiline_text() {
+    let issue = make_issue(1, Some("Test issue"), "Description", "Alice");
+    let thread = Thread::from(&IssueWithComments {
+        issue,
+        comments: Vec::new(),
+    });
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+    app.focus_input_box();
+    let editor = app.input_editor.as_mut().expect("editor");
+    editor.set_text("Line one\nLine two\nLine three");
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    assert!(
+        output.contains("Line one"),
+        "input box should contain first line, got:\n{output}"
+    );
+    assert!(
+        output.contains("Line two"),
+        "input box should contain second line, got:\n{output}"
+    );
+    insta::assert_snapshot!("thread_input_box_multiline_text", output);
 }
