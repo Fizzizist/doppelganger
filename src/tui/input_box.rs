@@ -49,7 +49,7 @@ pub fn render_input_box(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
 
     let inner = block.inner(area);
 
-    let (cursor, placeholder) = match app.input_editor.as_mut() {
+    let cursor = match app.input_editor.as_mut() {
         Some(editor) => {
             editor.set_viewport_width(inner.width);
             editor.set_viewport_height(inner.height);
@@ -86,28 +86,28 @@ pub fn render_input_box(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
                     .collect()
             };
 
-            let cursor = focused.then(|| cursor_xy(editor, inner));
+            let cursor = if focused {
+                cursor_xy(editor, inner)
+            } else {
+                None
+            };
             let paragraph = Paragraph::new(lines)
                 .block(block)
                 .wrap(Wrap { trim: false });
             f.render_widget(paragraph, area);
 
-            (cursor, false)
+            cursor
         }
         None => {
             let paragraph = Paragraph::new(vec![placeholder_line()]).block(block);
             f.render_widget(paragraph, area);
 
-            (None, true)
+            None
         }
     };
 
-    if placeholder {
-        let _ = placeholder;
-    }
-
-    if let Some(Some(pos)) = cursor {
-        f.set_cursor_position(pos);
+    if let Some((x, y)) = cursor {
+        f.set_cursor_position(ratatui::layout::Position { x, y });
     }
 }
 

@@ -32,7 +32,7 @@ pub async fn run_issue_tui(
         tracing::warn!("initial issue load failed: {e}");
     }
     let mut guard = terminal::TuiGuard::init()?;
-    run_loop(db_path, TuiMode::Issue, &mut guard, &mut app).await
+    run_loop(db_path, &mut guard, &mut app).await
 }
 
 pub async fn run_branch_tui(
@@ -50,21 +50,10 @@ pub async fn run_branch_tui(
         branch_name: branch_name.clone(),
     };
     let mut guard = terminal::TuiGuard::init()?;
-    run_loop(
-        db_path,
-        TuiMode::Branch { branch_name },
-        &mut guard,
-        &mut app,
-    )
-    .await
+    run_loop(db_path, &mut guard, &mut app).await
 }
 
-async fn run_loop(
-    db_path: &str,
-    mode: TuiMode,
-    guard: &mut terminal::TuiGuard,
-    app: &mut App,
-) -> Result<()> {
+async fn run_loop(db_path: &str, guard: &mut terminal::TuiGuard, app: &mut App) -> Result<()> {
     let mut events = EventStream::new();
     let mut tick = interval_at(tokio::time::Instant::now() + POLL_INTERVAL, POLL_INTERVAL);
     tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
@@ -74,21 +63,23 @@ async fn run_loop(
     loop {
         tokio::select! {
             _ = tick.tick() => {
-                if poll_db(db_path, &mode, app).await {
+                if poll_db(db_path, app).await {
                     draw(guard, app)?;
                 }
             }
             maybe_event = events.next() => {
                 match maybe_event {
                     Some(Ok(CrosstermEvent::Key(key))) => {
-                        match handle_key_event(db_path, &mode, guard, app, key.code, key.modifiers).await? {
-                            KeyResult::Quit => break,
-                            KeyResult::SubmitComment => {
-                                if let Err(e) = submit_comment(db_path, &mode, app).await {
-                                    app.show_error(e.to_string());
+                        if key.kind == crossterm::event::KeyEventKind::Press {
+                            match handle_key_event(db_path, guard, app, key.code, key.modifiers).await? {
+                                KeyResult::Quit => break,
+                                KeyResult::SubmitComment => {
+                                    if let Err(e) = submit_comment(db_path, app).await {
+                                        app.show_error(e.to_string());
+                                    }
                                 }
+                                KeyResult::Continue => {}
                             }
-                            KeyResult::Continue => {}
                         }
                         if matches!(app.screen, Screen::Thread) && app.thread.is_none()
                             && let Err(e) = event::load_issue_thread(db_path, app).await
@@ -111,7 +102,6 @@ async fn run_loop(
 
 async fn handle_key_event(
     db_path: &str,
-    mode: &TuiMode,
     guard: &mut terminal::TuiGuard,
     app: &mut App,
     code: KeyCode,
@@ -184,7 +174,7 @@ async fn handle_key_event(
     let was_thread = matches!(app.screen, Screen::Thread);
     let result = event::handle_key(app, code, modifiers);
 
-    if matches!(mode, TuiMode::Branch { .. })
+    if matches!(app.tui_mode, TuiMode::Branch { .. })
         && was_thread
         && matches!(app.screen, Screen::IssueList)
     {
@@ -194,7 +184,7 @@ async fn handle_key_event(
     Ok(result)
 }
 
-async fn submit_comment(db_path: &str, mode: &TuiMode, app: &mut App) -> Result<()> {
+async fn submit_comment(db_path: &str, app: &mut App) -> Result<()> {
     let content = match app.input_editor.as_mut() {
         Some(editor) => {
             let text = editor.text();
@@ -212,7 +202,13 @@ async fn submit_comment(db_path: &str, mode: &TuiMode, app: &mut App) -> Result<
         crate::db::author::find_or_create(conn, &app.author_name, app.author_email.as_deref())
             .await?;
 
-    match mode {
+    let is_branch = matches!(app.tui_mode, TuiMode::Branch { .. });
+    let branch_name = match &app.tui_mode {
+        TuiMode::Branch { branch_name } => Some(branch_name.clone()),
+        TuiMode::Issue => None,
+    };
+
+    match &app.tui_mode {
         TuiMode::Issue => {
             let issue_idx = app.selected_issue;
             if issue_idx >= app.issues.len() {
@@ -220,13 +216,11 @@ async fn submit_comment(db_path: &str, mode: &TuiMode, app: &mut App) -> Result<
             }
             let issue_id = app.issues[issue_idx].issue_id;
             db::comment::create_issue_comment(conn, issue_id, &content, author.author_id).await?;
-            event::load_issue_thread(db_path, app).await?;
         }
         TuiMode::Branch { branch_name } => {
             let branch = db::branch::get_by_name(conn, branch_name).await?;
             db::comment::create_branch_comment(conn, branch.branch_id, &content, author.author_id)
                 .await?;
-            event::load_branch_thread(db_path, branch_name, app).await?;
         }
     }
 
@@ -237,6 +231,14 @@ async fn submit_comment(db_path: &str, mode: &TuiMode, app: &mut App) -> Result<
         editor.enter_normal();
     }
     app.focus_thread();
+
+    if is_branch {
+        if let Some(branch_name) = branch_name {
+            event::load_branch_thread(db_path, &branch_name, app).await?;
+        }
+    } else {
+        event::load_issue_thread(db_path, app).await?;
+    }
 
     Ok(())
 }
@@ -267,14 +269,22 @@ fn draw(guard: &mut terminal::TuiGuard, app: &mut App) -> Result<()> {
     Ok(())
 }
 
-async fn poll_db(db_path: &str, mode: &TuiMode, app: &mut App) -> bool {
-    let result = match mode {
-        TuiMode::Issue => match app.screen {
+async fn poll_db(db_path: &str, app: &mut App) -> bool {
+    let is_branch = matches!(app.tui_mode, TuiMode::Branch { .. });
+    let branch_name = match &app.tui_mode {
+        TuiMode::Branch { branch_name } => Some(branch_name.clone()),
+        TuiMode::Issue => None,
+    };
+    let result = if is_branch {
+        if let Some(branch_name) = branch_name {
+            event::load_branch_thread(db_path, &branch_name, app).await
+        } else {
+            Ok(false)
+        }
+    } else {
+        match app.screen {
             Screen::IssueList => event::load_issues(db_path, app).await,
             Screen::Thread => event::load_issue_thread(db_path, app).await,
-        },
-        TuiMode::Branch { branch_name } => {
-            event::load_branch_thread(db_path, branch_name, app).await
         }
     };
     if let Err(ref e) = result {

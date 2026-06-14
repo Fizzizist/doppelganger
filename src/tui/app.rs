@@ -121,6 +121,9 @@ impl App {
                 self.screen = Screen::IssueList;
                 self.thread = None;
                 self.thread_scroll = 0;
+                self.focus = Focus::Thread;
+                self.ctrl_w_pending = false;
+                self.input_editor = None;
             }
             Screen::IssueList => {}
         }
@@ -182,6 +185,21 @@ mod tests {
         assert!(matches!(app.screen, Screen::IssueList));
         assert!(app.thread.is_none());
         assert_eq!(app.thread_scroll, 0);
+        assert!(matches!(app.focus, Focus::Thread));
+        assert!(app.input_editor.is_none());
+    }
+
+    #[test]
+    fn back_clears_input_editor_and_focus() {
+        let mut app = App::new("test".to_string(), None);
+        app.issues = sample_issues();
+        app.select_issue();
+        app.focus_input_box();
+        let editor = app.input_editor.as_mut().expect("editor");
+        editor.set_text("partial comment");
+        app.back();
+        assert!(matches!(app.focus, Focus::Thread));
+        assert!(app.input_editor.is_none());
     }
 
     #[test]
