@@ -2,6 +2,14 @@
 
 ![logo](./assets/doppelganger.png)
 
+## Use Cases
+Why would anyone in their right mind use this thing?
+
+- In my case: I want a GitHub/GitLab type experience _locally_ with just me and my agents so I am not spamming AI chat all over my GitHub repo.
+- Maybe you don't host your repo on any GitHub/GitLab service, but you want a local issue/branch conversation interface for you and your agents to collaborate.
+
+### More detail on my specific use case
+
 This app solve a very specific problem that likely wouldn't help the majority of the population.
 
 I use the [mach6 skillset](https://github.com/Fizzizist/illustrious-manager/tree/trunk/.claude/skills) for agentic development. I like most things about it, but I wanted a local version where I didn't have to use GitHub as the main message bus between me and my agents.
@@ -94,4 +102,10 @@ sequenceDiagram
     Me->>Implementer Agent: /dg-publish
     Implementer Agent->>GitHub: Opens PR
     Me->>GitHub: Refine description and set as ready for review
+```
+
+## Installation
+
+```sh
+cargo install --git https://github.com/Fizzizist/doppelganger.git
 ```
