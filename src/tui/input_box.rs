@@ -72,7 +72,7 @@ pub fn render_input_box(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
         .title(Span::styled(title, border_style));
 
     let inner = block.inner(area);
-    let text_width = inner_width(inner.width);
+    let text_width = inner.width;
 
     let cursor = match app.input_editor.as_mut() {
         Some(editor) => {
@@ -117,7 +117,7 @@ pub fn render_input_box(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
             };
 
             let cursor = if focused {
-                cursor_xy(editor, inner)
+                cursor_xy(editor, inner, text_width)
             } else {
                 None
             };
@@ -140,20 +140,14 @@ pub fn render_input_box(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
 }
 
 fn update_viewport(editor: &mut TextFieldEditor, rect: Rect) {
-    let text_width = inner_width(rect.width);
-    {
-        let v = editor.editor.host_mut().viewport_mut();
-        v.wrap = Wrap::Word;
-        v.text_width = text_width;
-        v.width = rect.width;
-        v.height = rect.height;
-    }
-    let mut viewport = *editor.editor.host().viewport();
-    editor
-        .editor
-        .buffer_mut()
-        .ensure_cursor_visible(&mut viewport);
-    *editor.editor.host_mut().viewport_mut() = viewport;
+    let text_width = rect.width;
+    let v = editor.editor.host_mut().viewport_mut();
+    v.wrap = Wrap::Word;
+    v.text_width = text_width;
+    v.width = rect.width;
+    v.height = rect.height;
+    v.top_row = 0;
+    v.top_col = 0;
 }
 
 fn make_selection_lines(
@@ -239,16 +233,14 @@ fn placeholder_line(palette: &FormPalette) -> Line<'static> {
     Line::from(Span::styled("Ctrl+W j to comment", palette.placeholder))
 }
 
-fn cursor_xy(editor: &TextFieldEditor, rect: Rect) -> Option<(u16, u16)> {
+fn cursor_xy(editor: &TextFieldEditor, rect: Rect, text_width: u16) -> Option<(u16, u16)> {
     let viewport = editor.editor.host().viewport();
     let buffer = editor.buffer();
     let (row, col) = editor.cursor();
 
-    let screen_row = buffer.cursor_screen_row(viewport)?;
-
     let text = editor.text();
     let line_text = text.split('\n').nth(row)?;
-    let segments = wrap_segments(line_text, viewport.text_width, Wrap::Word);
+    let segments = wrap_segments(line_text, text_width, Wrap::Word);
     let seg_idx = segment_for_col(&segments, col);
     let &(seg_start, _seg_end) = segments.get(seg_idx)?;
 
@@ -259,7 +251,12 @@ fn cursor_xy(editor: &TextFieldEditor, rect: Rect) -> Option<(u16, u16)> {
         .collect();
     let dx = UnicodeWidthStr::width(prefix.as_str()) as u16;
 
-    let dy = screen_row as u16;
+    let rows_before = if row > 0 {
+        buffer.screen_rows_between(viewport, 0, row - 1)
+    } else {
+        0
+    };
+    let dy = (rows_before + seg_idx) as u16;
 
     if dy >= rect.height {
         return None;
@@ -329,22 +326,18 @@ mod tests {
         update_viewport(&mut editor, rect);
         let v = editor.editor.host().viewport();
         assert!(matches!(v.wrap, Wrap::Word), "wrap should be Word");
-        assert_eq!(v.text_width, 38, "text_width should be inner width");
+        assert_eq!(v.text_width, 40, "text_width should match inner width");
     }
 
     #[test]
-    fn update_viewport_delegates_to_ensure_cursor_visible() {
+    fn update_viewport_resets_top_row_and_col() {
         let mut editor = TextFieldEditor::new(false);
         editor.set_text(&"line\n".repeat(20));
         let rect = Rect::new(0, 0, 40, 3);
         update_viewport(&mut editor, rect);
         let v = editor.editor.host().viewport();
-        assert!(
-            v.top_row <= 19,
-            "top_row should be clamped so cursor row 19 stays visible, got {}",
-            v.top_row
-        );
-        assert_eq!(v.top_col, 0, "with wrap active, top_col should be 0");
+        assert_eq!(v.top_row, 0, "top_row should be 0 for input box");
+        assert_eq!(v.top_col, 0, "top_col should be 0 with wrap active");
     }
 
     #[test]
@@ -377,11 +370,8 @@ mod tests {
         let v = editor.editor.host().viewport();
         assert_eq!(v.width, 40);
         assert_eq!(v.height, 3);
-        assert!(
-            v.top_row <= 19,
-            "top_row should be clamped so cursor row 19 stays visible, got {}",
-            v.top_row
-        );
+        assert_eq!(v.top_row, 0, "input box should not scroll vertically");
+        assert_eq!(v.top_col, 0, "with wrap, top_col should be 0");
     }
 
     fn buf_contains(buf: &ratatui::buffer::Buffer, needle: &str) -> bool {

@@ -1,8 +1,6 @@
 use crate::tui::app::App;
 use crate::tui::highlight::build_renderer;
-use crate::tui::input_box::{
-    inner_width, input_box_height, max_input_box_height, render_input_box,
-};
+use crate::tui::input_box::{input_box_height, max_input_box_height, render_input_box};
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
@@ -24,7 +22,7 @@ fn markdown_theme() -> the_other_tui_markdown::Theme {
 pub fn render(f: &mut ratatui::Frame, app: &mut App) {
     let total_height = f.area().height;
     let total_width = f.area().width;
-    let input_text_width = inner_width(total_width.saturating_sub(2));
+    let input_text_width = total_width.saturating_sub(2);
     let input_height = match &app.input_editor {
         Some(editor) => {
             input_box_height(editor, max_input_box_height(total_height), input_text_width)
