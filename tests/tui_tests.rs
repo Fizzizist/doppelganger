@@ -387,3 +387,22 @@ fn thread_input_box_multiline_text() {
     );
     insta::assert_snapshot!("thread_input_box_multiline_text", output);
 }
+
+#[test]
+fn thread_input_box_word_wrap() {
+    let issue = make_issue(1, Some("Test issue"), "Description", "Alice");
+    let thread = Thread::from(&IssueWithComments {
+        issue,
+        comments: Vec::new(),
+    });
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+    app.focus_input_box();
+    let editor = app.input_editor.as_mut().expect("editor");
+    editor.set_text("abcdefghijklmnopqrstuvwxyz");
+
+    let output = render_to_string(20, 24, |f| view::thread::render(f, &mut app));
+    insta::assert_snapshot!("thread_input_box_word_wrap", output);
+}
