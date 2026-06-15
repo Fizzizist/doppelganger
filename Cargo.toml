@@ -1,6 +1,6 @@
 [package]
 name = "doppelganger"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 
 [[bin]]
@@ -34,6 +34,7 @@ toml = "1.1.2"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 turso = "0.6.1"
+unicode-width = "0.2.2"
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
