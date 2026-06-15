@@ -3,13 +3,14 @@ use hjkl_editor_tui::crossterm_key_event_to_input;
 use hjkl_engine::{VimMode, decode_planned_input};
 
 use crate::db::{Database, comment, issue};
-use crate::tui::app::{App, Focus, ModalState, Screen};
+use crate::tui::app::{App, EditTarget, Focus, ModalState, Screen};
 use crate::tui::model::Thread;
 
 pub enum KeyResult {
     Continue,
     Quit,
     SubmitComment,
+    EditEntity,
 }
 
 pub fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> KeyResult {
@@ -107,6 +108,38 @@ fn handle_thread_focus_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers
             app.back();
             KeyResult::Continue
         }
+        (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
+            let max = app.thread.as_ref().map(|t| t.comments.len()).unwrap_or(0);
+            app.thread_selected = (app.thread_selected + 1).min(max);
+            if let Some(&start) = app.item_line_starts.get(app.thread_selected) {
+                app.thread_scroll = start as u16;
+            }
+            KeyResult::Continue
+        }
+        (KeyCode::Char('k'), _) | (KeyCode::Up, _) => {
+            app.thread_selected = app.thread_selected.saturating_sub(1);
+            if let Some(&start) = app.item_line_starts.get(app.thread_selected) {
+                app.thread_scroll = start as u16;
+            }
+            KeyResult::Continue
+        }
+        (KeyCode::Char('e'), _) => {
+            let Some(thread) = &app.thread else {
+                return KeyResult::Continue;
+            };
+            let target = if app.thread_selected == 0 {
+                EditTarget::Description
+            } else {
+                let idx = app.thread_selected - 1;
+                if idx < thread.comments.len() {
+                    EditTarget::Comment(thread.comments[idx].comment_id)
+                } else {
+                    return KeyResult::Continue;
+                }
+            };
+            app.pending_edit = Some(target);
+            KeyResult::EditEntity
+        }
         _ => {
             handle_thread_scroll(app, code, modifiers);
             KeyResult::Continue
@@ -150,12 +183,6 @@ fn handle_input_box_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -
 
 pub fn handle_thread_scroll(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
     match (code, modifiers) {
-        (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
-            app.thread_scroll = app.thread_scroll.saturating_add(1);
-        }
-        (KeyCode::Char('k'), _) | (KeyCode::Up, _) => {
-            app.thread_scroll = app.thread_scroll.saturating_sub(1);
-        }
         (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
             app.thread_scroll = app.thread_scroll.saturating_sub(20);
         }

@@ -41,63 +41,108 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
         ])
         .split(f.area());
 
-    {
-        let thread = match &app.thread {
-            Some(t) => t,
-            None => return,
-        };
+    // Clone what we need from the thread to avoid borrow conflicts
+    let thread_data = match &app.thread {
+        Some(t) => (
+            t.issue_id,
+            t.title.clone(),
+            t.author.clone(),
+            t.created_at.clone(),
+            t.updated_at.clone(),
+            t.description.clone(),
+            t.comments
+                .iter()
+                .map(|c| {
+                    (
+                        c.comment_id,
+                        c.author.clone(),
+                        c.created_at.clone(),
+                        c.content.clone(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        ),
+        None => return,
+    };
 
-        let header = Paragraph::new(Line::from(vec![
-            Span::styled(
-                format!("#{} ", thread.issue_id),
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                thread.title.clone(),
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  "),
-            Span::styled(thread.author.clone(), Style::default().fg(Color::Yellow)),
-            Span::raw("  "),
-            Span::styled(
-                thread.updated_at.clone(),
-                Style::default().fg(Color::DarkGray),
-            ),
-        ]))
-        .block(Block::default().borders(Borders::BOTTOM));
-        f.render_widget(header, chunks[0]);
+    let (issue_id, title, author, _created_at, updated_at, description, comments) = thread_data;
 
-        let renderer = build_renderer(markdown_theme());
-        let mut body_lines: Vec<Line> = Vec::new();
+    let header = Paragraph::new(Line::from(vec![
+        Span::styled(
+            format!("#{} ", issue_id),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(title, Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("  "),
+        Span::styled(author, Style::default().fg(Color::Yellow)),
+        Span::raw("  "),
+        Span::styled(updated_at, Style::default().fg(Color::DarkGray)),
+    ]))
+    .block(Block::default().borders(Borders::BOTTOM));
+    f.render_widget(header, chunks[0]);
 
-        let desc_text =
-            the_other_tui_markdown::into_text_with_renderer(&thread.description, &renderer);
-        for line in desc_text.lines {
+    let renderer = build_renderer(markdown_theme());
+
+    // Track item line starts
+    let mut item_line_starts: Vec<usize> = Vec::new();
+    let mut item_for_line: Vec<usize> = Vec::new();
+
+    let mut body_lines: Vec<Line> = Vec::new();
+
+    // Item 0: description
+    item_line_starts.push(0);
+    let desc_text = the_other_tui_markdown::into_text_with_renderer(&description, &renderer);
+    let desc_line_count = desc_text.lines.len();
+    item_for_line.extend(std::iter::repeat_n(0, desc_line_count));
+    for line in desc_text.lines {
+        body_lines.push(line);
+    }
+
+    // Items 1..n: comments
+    for (ci, (_comment_id, author, created_at, content)) in comments.iter().enumerate() {
+        let item_idx = ci + 1;
+        item_line_starts.push(body_lines.len());
+        item_for_line.push(item_idx); // blank line
+        body_lines.push(Line::from(""));
+        item_for_line.push(item_idx); // header line
+        body_lines.push(Line::from(vec![
+            Span::styled(author.clone(), Style::default().fg(Color::Cyan)),
+            Span::raw(" "),
+            Span::styled(created_at.clone(), Style::default().fg(Color::DarkGray)),
+        ]));
+        let comment_text = the_other_tui_markdown::into_text_with_renderer(content, &renderer);
+        for line in comment_text.lines {
+            item_for_line.push(item_idx);
             body_lines.push(line);
         }
-
-        for comment in &thread.comments {
-            body_lines.push(Line::from(""));
-            body_lines.push(Line::from(vec![
-                Span::styled(comment.author.clone(), Style::default().fg(Color::Cyan)),
-                Span::raw(" "),
-                Span::styled(
-                    comment.created_at.clone(),
-                    Style::default().fg(Color::DarkGray),
-                ),
-            ]));
-            let comment_text =
-                the_other_tui_markdown::into_text_with_renderer(&comment.content, &renderer);
-            for line in comment_text.lines {
-                body_lines.push(line);
-            }
-        }
-
-        let body = Paragraph::new(body_lines)
-            .scroll((app.thread_scroll, 0))
-            .wrap(Wrap { trim: false });
-        f.render_widget(body, chunks[1]);
     }
+
+    // Update app with item line starts for scroll-follow
+    app.item_line_starts = item_line_starts;
+
+    // Apply gutter highlight (only when Focus::Thread)
+    let selected = app.thread_selected;
+    let is_thread_focus = matches!(app.focus, crate::tui::app::Focus::Thread);
+
+    let body_lines: Vec<Line> = body_lines
+        .into_iter()
+        .enumerate()
+        .map(|(i, mut line)| {
+            let item = item_for_line.get(i).copied().unwrap_or(0);
+            if is_thread_focus && item == selected {
+                line.spans
+                    .insert(0, Span::styled("│ ", Style::default().fg(Color::Yellow)));
+            } else {
+                line.spans.insert(0, Span::raw("  "));
+            }
+            line
+        })
+        .collect();
+
+    let body = Paragraph::new(body_lines)
+        .scroll((app.thread_scroll, 0))
+        .wrap(Wrap { trim: false });
+    f.render_widget(body, chunks[1]);
 
     render_input_box(f, app, chunks[2]);
 }

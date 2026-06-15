@@ -5,12 +5,12 @@ expression: output
 #1 feature/dark-mode  Alice  2025-01-02 12:00:00                                
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-Implement the dark theme toggle.                                                
+│ Implement the dark theme toggle.                                              
+│                                                                               
+│ See design doc for details.                                                   
                                                                                 
-See design doc for details.                                                     
-                                                                                
-Bob 2025-01-01 10:00:00                                                         
-Looking good                                                                    
+  Bob 2025-01-01 10:00:00                                                       
+  Looking good                                                                  
                                                                                 
                                                                                 
                                                                                 

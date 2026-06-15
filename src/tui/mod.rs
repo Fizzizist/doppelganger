@@ -7,7 +7,7 @@ pub mod model;
 pub mod terminal;
 pub mod view;
 
-pub use app::{App, Focus, ModalState, TuiMode};
+pub use app::{App, EditTarget, Focus, ModalState, TuiMode};
 pub use model::{Thread, ThreadComment};
 
 use crossterm::event::{Event as CrosstermEvent, EventStream, KeyCode, KeyModifiers};
@@ -78,6 +78,11 @@ async fn run_loop(db_path: &str, guard: &mut terminal::TuiGuard, app: &mut App) 
                                         app.show_error(e.to_string());
                                     }
                                 }
+                                KeyResult::EditEntity => {
+                                    if let Err(e) = handle_edit(db_path, guard, app).await {
+                                        app.show_error(e.to_string());
+                                    }
+                                }
                                 KeyResult::Continue => {}
                             }
                         }
@@ -123,12 +128,12 @@ async fn handle_key_event(
                 crate::config::LoadOutcome::Created(_, c) => c.editor,
             };
 
-            let content_result = editor::spawn_editor(&editor);
+            let content_result = editor::spawn_editor(&editor, "");
 
             guard.resume()?;
 
             match content_result {
-                Ok(description) => {
+                Ok(Some(description)) => {
                     let db = crate::db::Database::open(db_path).await?;
                     let conn = db.conn();
                     let author = crate::db::author::find_or_create(
@@ -157,6 +162,9 @@ async fn handle_key_event(
                     app.selected_issue = idx;
                     app.select_issue();
                     event::load_issue_thread(db_path, app).await?;
+                }
+                Ok(None) => {
+                    app.show_error("content is empty; issue not created".to_string());
                 }
                 Err(e) => {
                     app.show_error(e.to_string());
@@ -243,6 +251,85 @@ async fn submit_comment(db_path: &str, app: &mut App) -> Result<()> {
     Ok(())
 }
 
+async fn handle_edit(db_path: &str, guard: &mut terminal::TuiGuard, app: &mut App) -> Result<()> {
+    let target = match app.pending_edit.take() {
+        Some(t) => t,
+        None => return Ok(()),
+    };
+
+    let initial = match &target {
+        crate::tui::app::EditTarget::Description => app
+            .thread
+            .as_ref()
+            .map(|t| t.description.clone())
+            .unwrap_or_default(),
+        crate::tui::app::EditTarget::Comment(id) => app
+            .thread
+            .as_ref()
+            .and_then(|t| t.comments.iter().find(|c| c.comment_id == *id))
+            .map(|c| c.content.clone())
+            .unwrap_or_default(),
+    };
+
+    let editor = match crate::config::load_or_init()? {
+        crate::config::LoadOutcome::Loaded(c) => c.editor,
+        crate::config::LoadOutcome::Created(_, c) => c.editor,
+    };
+
+    guard.suspend()?;
+    let result = editor::spawn_editor(&editor, &initial);
+    guard.resume()?;
+
+    let content = match result? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
+
+    let db = crate::db::Database::open(db_path).await?;
+    let conn = db.conn();
+
+    match &target {
+        crate::tui::app::EditTarget::Description => match &app.tui_mode {
+            TuiMode::Issue => {
+                let issue_idx = app.selected_issue;
+                if issue_idx < app.issues.len() {
+                    let issue_id = app.issues[issue_idx].issue_id;
+                    crate::db::issue::update_description(conn, issue_id, &content).await?;
+                }
+            }
+            TuiMode::Branch { branch_name } => {
+                crate::db::branch::update_description(conn, branch_name, &content).await?;
+            }
+        },
+        crate::tui::app::EditTarget::Comment(id) => match &app.tui_mode {
+            TuiMode::Issue => {
+                crate::db::comment::update_issue_comment(conn, *id, &content).await?;
+            }
+            TuiMode::Branch { .. } => {
+                crate::db::comment::update_branch_comment(conn, *id, &content).await?;
+            }
+        },
+    }
+
+    db.checkpoint().await?;
+
+    let branch_name = match &app.tui_mode {
+        TuiMode::Branch { branch_name } => Some(branch_name.clone()),
+        TuiMode::Issue => None,
+    };
+
+    if let Some(name) = branch_name {
+        event::load_branch_thread(db_path, &name, app).await?;
+    } else {
+        event::load_issue_thread(db_path, app).await?;
+    }
+
+    let max = app.thread.as_ref().map(|t| t.comments.len()).unwrap_or(0);
+    app.thread_selected = app.thread_selected.min(max);
+
+    Ok(())
+}
+
 impl From<bool> for KeyResult {
     fn from(quit: bool) -> Self {
         if quit {
@@ -287,8 +374,11 @@ async fn poll_db(db_path: &str, app: &mut App) -> bool {
             Screen::Thread => event::load_issue_thread(db_path, app).await,
         }
     };
-    if let Err(ref e) = result {
-        tracing::warn!("db poll failed: {e}");
+    match result {
+        Ok(changed) => changed,
+        Err(e) => {
+            tracing::warn!("db poll failed: {e}");
+            false
+        }
     }
-    result.unwrap_or(false)
 }

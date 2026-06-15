@@ -133,6 +133,66 @@ pub async fn list_branch_comments(
     Ok(comments)
 }
 
+pub async fn update_issue_comment(
+    conn: &turso::Connection,
+    issue_comment_id: i64,
+    content: &str,
+) -> Result<IssueComment> {
+    conn.execute(
+        "UPDATE issue_comment SET content = ?1, updated_at = datetime('now') \
+         WHERE issue_comment_id = ?2",
+        turso::params::Params::Positional(vec![
+            Value::Text(content.to_string()),
+            Value::Integer(issue_comment_id),
+        ]),
+    )
+    .await?;
+
+    let mut rows = conn
+        .query(
+            format!("{SELECT_ISSUE_COMMENT} WHERE issue_comment.issue_comment_id = ?1"),
+            turso::params::Params::Positional(vec![Value::Integer(issue_comment_id)]),
+        )
+        .await?;
+
+    match rows.next().await? {
+        Some(row) => row_to_issue_comment(&row),
+        None => Err(Error::Database(turso::Error::ConversionFailure(format!(
+            "issue_comment {issue_comment_id} not found after update"
+        )))),
+    }
+}
+
+pub async fn update_branch_comment(
+    conn: &turso::Connection,
+    branch_comment_id: i64,
+    content: &str,
+) -> Result<BranchComment> {
+    conn.execute(
+        "UPDATE branch_comment SET content = ?1, updated_at = datetime('now') \
+         WHERE branch_comment_id = ?2",
+        turso::params::Params::Positional(vec![
+            Value::Text(content.to_string()),
+            Value::Integer(branch_comment_id),
+        ]),
+    )
+    .await?;
+
+    let mut rows = conn
+        .query(
+            format!("{SELECT_BRANCH_COMMENT} WHERE branch_comment.branch_comment_id = ?1"),
+            turso::params::Params::Positional(vec![Value::Integer(branch_comment_id)]),
+        )
+        .await?;
+
+    match rows.next().await? {
+        Some(row) => row_to_branch_comment(&row),
+        None => Err(Error::Database(turso::Error::ConversionFailure(format!(
+            "branch_comment {branch_comment_id} not found after update"
+        )))),
+    }
+}
+
 fn row_to_issue_comment(row: &turso::Row) -> Result<IssueComment> {
     Ok(IssueComment {
         issue_comment_id: extract_int(row, 0)?,
@@ -153,4 +213,72 @@ fn row_to_branch_comment(row: &turso::Row) -> Result<BranchComment> {
         created_at: extract_text(row, 4)?,
         updated_at: extract_text(row, 5)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::db::{Database, author, branch, issue};
+
+    #[tokio::test]
+    async fn update_issue_comment_changes_content_and_preserves_author() {
+        let db = Database::open_in_memory().await.expect("open in-memory db");
+        let conn = db.conn();
+
+        let author = author::find_or_create(conn, "Alice", Some("a@b.com"))
+            .await
+            .expect("create author");
+        let iss = issue::create(conn, None, "desc", author.author_id, None)
+            .await
+            .expect("create issue");
+
+        let c = super::create_issue_comment(conn, iss.issue_id, "original", author.author_id)
+            .await
+            .expect("create comment");
+        let original_updated_at = c.updated_at.clone();
+
+        let updated = super::update_issue_comment(conn, c.issue_comment_id, "edited")
+            .await
+            .expect("update comment");
+
+        assert_eq!(updated.content, "edited");
+        assert_eq!(updated.author, "Alice");
+        assert_eq!(updated.issue_id, iss.issue_id);
+        assert!(
+            updated.updated_at >= original_updated_at,
+            "updated_at must not go backwards"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_branch_comment_changes_content_and_preserves_author() {
+        let db = Database::open_in_memory().await.expect("open in-memory db");
+        let conn = db.conn();
+
+        let author = author::find_or_create(conn, "Bob", Some("b@b.com"))
+            .await
+            .expect("create author");
+        let iss = issue::create(conn, None, "desc", author.author_id, None)
+            .await
+            .expect("create issue");
+        let br = branch::create(conn, "feature", "desc", author.author_id, iss.issue_id)
+            .await
+            .expect("create branch");
+
+        let c = super::create_branch_comment(conn, br.branch_id, "original", author.author_id)
+            .await
+            .expect("create comment");
+        let original_updated_at = c.updated_at.clone();
+
+        let updated = super::update_branch_comment(conn, c.branch_comment_id, "edited")
+            .await
+            .expect("update comment");
+
+        assert_eq!(updated.content, "edited");
+        assert_eq!(updated.author, "Bob");
+        assert_eq!(updated.branch_id, br.branch_id);
+        assert!(
+            updated.updated_at >= original_updated_at,
+            "updated_at must not go backwards"
+        );
+    }
 }

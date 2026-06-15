@@ -1,6 +1,11 @@
 use crate::tui::model::Thread;
 use hjkl_form::TextFieldEditor;
 
+pub enum EditTarget {
+    Description,
+    Comment(i64),
+}
+
 pub enum ModalState {
     NameInput,
     Error(String),
@@ -42,6 +47,9 @@ pub struct App {
     pub focus: Focus,
     pub ctrl_w_pending: bool,
     pub tui_mode: TuiMode,
+    pub thread_selected: usize,
+    pub pending_edit: Option<EditTarget>,
+    pub item_line_starts: Vec<usize>,
 }
 
 impl Default for App {
@@ -67,6 +75,9 @@ impl App {
             focus: Focus::default(),
             ctrl_w_pending: false,
             tui_mode: TuiMode::default(),
+            thread_selected: 0,
+            pending_edit: None,
+            item_line_starts: Vec::new(),
         }
     }
 
@@ -112,6 +123,7 @@ impl App {
             self.screen = Screen::Thread;
             self.thread_scroll = 0;
             self.tui_mode = TuiMode::Issue;
+            self.thread_selected = 0;
         }
     }
 
@@ -124,6 +136,9 @@ impl App {
                 self.focus = Focus::Thread;
                 self.ctrl_w_pending = false;
                 self.input_editor = None;
+                self.thread_selected = 0;
+                self.pending_edit = None;
+                self.item_line_starts.clear();
             }
             Screen::IssueList => {}
         }
@@ -134,6 +149,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::tui::event::{KeyResult, handle_key, handle_modal_key};
+    use crate::tui::model::ThreadComment;
     use crossterm::event::{KeyCode, KeyModifiers};
     use hjkl_engine::VimMode;
 
@@ -286,26 +302,162 @@ mod tests {
     }
 
     #[test]
-    fn key_j_scrolls_thread_down() {
+    fn key_j_moves_selection_down() {
         let mut app = App::default();
         app.screen = Screen::Thread;
+        app.thread = Some(Thread {
+            issue_id: 1,
+            title: "Test".to_string(),
+            author: "Alice".to_string(),
+            created_at: "2025-01-01".to_string(),
+            updated_at: "2025-01-01".to_string(),
+            description: "desc".to_string(),
+            comments: vec![
+                ThreadComment {
+                    comment_id: 1,
+                    author: "Bob".to_string(),
+                    created_at: "2025-01-01".to_string(),
+                    content: "comment".to_string(),
+                },
+                ThreadComment {
+                    comment_id: 2,
+                    author: "Charlie".to_string(),
+                    created_at: "2025-01-01".to_string(),
+                    content: "comment2".to_string(),
+                },
+            ],
+        });
+        assert_eq!(app.thread_selected, 0);
         assert!(matches!(
             handle_key(&mut app, KeyCode::Char('j'), KeyModifiers::NONE),
             KeyResult::Continue
         ));
-        assert_eq!(app.thread_scroll, 1);
+        assert_eq!(app.thread_selected, 1);
     }
 
     #[test]
-    fn key_k_scrolls_thread_up() {
+    fn key_k_moves_selection_up() {
         let mut app = App::default();
         app.screen = Screen::Thread;
-        app.thread_scroll = 5;
+        app.thread = Some(Thread {
+            issue_id: 1,
+            title: "Test".to_string(),
+            author: "Alice".to_string(),
+            created_at: "2025-01-01".to_string(),
+            updated_at: "2025-01-01".to_string(),
+            description: "desc".to_string(),
+            comments: vec![ThreadComment {
+                comment_id: 1,
+                author: "Bob".to_string(),
+                created_at: "2025-01-01".to_string(),
+                content: "comment".to_string(),
+            }],
+        });
+        app.thread_selected = 1;
         assert!(matches!(
             handle_key(&mut app, KeyCode::Char('k'), KeyModifiers::NONE),
             KeyResult::Continue
         ));
-        assert_eq!(app.thread_scroll, 4);
+        assert_eq!(app.thread_selected, 0);
+    }
+
+    #[test]
+    fn key_j_clamped_at_last_item() {
+        let mut app = App::default();
+        app.screen = Screen::Thread;
+        app.thread = Some(Thread {
+            issue_id: 1,
+            title: "Test".to_string(),
+            author: "Alice".to_string(),
+            created_at: "2025-01-01".to_string(),
+            updated_at: "2025-01-01".to_string(),
+            description: "desc".to_string(),
+            comments: vec![ThreadComment {
+                comment_id: 1,
+                author: "Bob".to_string(),
+                created_at: "2025-01-01".to_string(),
+                content: "comment".to_string(),
+            }],
+        });
+        // 1 comment = max index 1 (description=0, comment=1)
+        app.thread_selected = 1;
+        assert!(matches!(
+            handle_key(&mut app, KeyCode::Char('j'), KeyModifiers::NONE),
+            KeyResult::Continue
+        ));
+        assert_eq!(app.thread_selected, 1);
+    }
+
+    #[test]
+    fn key_k_clamped_at_zero() {
+        let mut app = App::default();
+        app.screen = Screen::Thread;
+        app.thread_selected = 0;
+        assert!(matches!(
+            handle_key(&mut app, KeyCode::Char('k'), KeyModifiers::NONE),
+            KeyResult::Continue
+        ));
+        assert_eq!(app.thread_selected, 0);
+    }
+
+    #[test]
+    fn key_e_on_description_sets_pending_edit_description() {
+        let mut app = App::default();
+        app.screen = Screen::Thread;
+        app.thread = Some(Thread {
+            issue_id: 1,
+            title: "Test".to_string(),
+            author: "Alice".to_string(),
+            created_at: "2025-01-01".to_string(),
+            updated_at: "2025-01-01".to_string(),
+            description: "desc".to_string(),
+            comments: vec![],
+        });
+        app.thread_selected = 0;
+        assert!(matches!(
+            handle_key(&mut app, KeyCode::Char('e'), KeyModifiers::NONE),
+            KeyResult::EditEntity
+        ));
+        assert!(matches!(app.pending_edit, Some(EditTarget::Description)));
+    }
+
+    #[test]
+    fn key_e_on_comment_sets_pending_edit_comment() {
+        let mut app = App::default();
+        app.screen = Screen::Thread;
+        app.thread = Some(Thread {
+            issue_id: 1,
+            title: "Test".to_string(),
+            author: "Alice".to_string(),
+            created_at: "2025-01-01".to_string(),
+            updated_at: "2025-01-01".to_string(),
+            description: "desc".to_string(),
+            comments: vec![ThreadComment {
+                comment_id: 42,
+                author: "Bob".to_string(),
+                created_at: "2025-01-01".to_string(),
+                content: "comment".to_string(),
+            }],
+        });
+        app.thread_selected = 1; // comment index
+        assert!(matches!(
+            handle_key(&mut app, KeyCode::Char('e'), KeyModifiers::NONE),
+            KeyResult::EditEntity
+        ));
+        assert!(matches!(app.pending_edit, Some(EditTarget::Comment(42))));
+    }
+
+    #[test]
+    fn ctrl_d_does_not_change_selection() {
+        let mut app = App::new("test".to_string(), None);
+        app.screen = Screen::Thread;
+        app.thread_selected = 3;
+        assert!(matches!(
+            handle_key(&mut app, KeyCode::Char('d'), KeyModifiers::CONTROL),
+            KeyResult::Continue
+        ));
+        assert_eq!(app.thread_scroll, 20);
+        assert_eq!(app.thread_selected, 3);
     }
 
     #[test]

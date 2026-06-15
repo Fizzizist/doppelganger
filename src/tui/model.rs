@@ -13,6 +13,7 @@ pub struct Thread {
 }
 
 pub struct ThreadComment {
+    pub comment_id: i64,
     pub author: String,
     pub created_at: String,
     pub content: String,
@@ -70,6 +71,7 @@ impl From<&BranchWithComments> for Thread {
 impl From<&IssueComment> for ThreadComment {
     fn from(comment: &IssueComment) -> Self {
         Self {
+            comment_id: comment.issue_comment_id,
             author: comment.author.clone(),
             created_at: comment.created_at.clone(),
             content: comment.content.clone(),
@@ -80,6 +82,7 @@ impl From<&IssueComment> for ThreadComment {
 impl From<&BranchComment> for ThreadComment {
     fn from(comment: &BranchComment) -> Self {
         Self {
+            comment_id: comment.branch_comment_id,
             author: comment.author.clone(),
             created_at: comment.created_at.clone(),
             content: comment.content.clone(),
@@ -181,7 +184,9 @@ mod tests {
         let thread = Thread::from(&iwc);
         assert_eq!(thread.issue_id, 1);
         assert_eq!(thread.comments.len(), 2);
+        assert_eq!(thread.comments[0].comment_id, 1);
         assert_eq!(thread.comments[0].content, "First");
+        assert_eq!(thread.comments[1].comment_id, 2);
         assert_eq!(thread.comments[1].content, "Second");
     }
 
@@ -219,7 +224,9 @@ mod tests {
         let thread = Thread::from(&bwc);
         assert_eq!(thread.issue_id, 7);
         assert_eq!(thread.comments.len(), 2);
+        assert_eq!(thread.comments[0].comment_id, 1);
         assert_eq!(thread.comments[0].content, "Note");
+        assert_eq!(thread.comments[1].comment_id, 2);
         assert_eq!(thread.comments[1].content, "Reply");
     }
 
@@ -234,6 +241,7 @@ mod tests {
             updated_at: "2025-01-01".to_string(),
         };
         let tc = ThreadComment::from(&ic);
+        assert_eq!(tc.comment_id, 1);
         assert_eq!(tc.author, "Alice");
         assert_eq!(tc.content, "Hello");
         assert_eq!(tc.created_at, "2025-01-01");
@@ -250,6 +258,7 @@ mod tests {
             updated_at: "2025-01-01".to_string(),
         };
         let tc = ThreadComment::from(&bc);
+        assert_eq!(tc.comment_id, 1);
         assert_eq!(tc.author, "Bob");
         assert_eq!(tc.content, "World");
     }

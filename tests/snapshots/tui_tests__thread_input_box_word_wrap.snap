@@ -1,12 +1,11 @@
 ---
 source: tests/tui_tests.rs
-assertion_line: 407
 expression: output
 ---
 #1 Test issue  Alice
                     
 ────────────────────
-Description         
+  Description       
                     
                     
                     
