@@ -9,14 +9,13 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
+use unicode_width::UnicodeWidthChar;
 
 /// Approximates the number of visual rows a line occupies once ratatui
 /// word-wraps it at `width` columns (with `Wrap { trim: false }`). ratatui does
 /// not expose its wrap mapping, so this greedy word-wrap is a best-effort match
 /// used to drive selection scroll-follow.
 fn wrapped_row_count(line: &Line, width: u16) -> u16 {
-    use unicode_width::UnicodeWidthChar;
-
     // Greedily place one word-segment (a run of chars ending in a space, matching
     // `split_inclusive(' ')`) into the current row, wrapping when it overflows.
     fn place(w: usize, width: usize, rows: &mut u16, col: &mut usize) {
