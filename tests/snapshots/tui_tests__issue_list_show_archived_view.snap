@@ -4,18 +4,18 @@ expression: output
 ---
 ┌Issues────────────────────────────────────────────────────────────────────────┐
 │   #     Name                     Author                   Updated            │
-│>> 1     First                    Alice                    2025-01-02 12:00:00│
-│   2     Second                   Bob                      2025-01-02 12:00:00│
+│>> 1     Active issue             Alice                    2025-01-02 12:00:00│
+│   2     [archived] Done with thi Bob                      2025-01-02 12:00:00│
 │                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
-│                   ┌New issue name (blank = untitled)─────┐                   │
-│                   │My Bug Report                         │                   │
-│                   │                                      │                   │
-│                   │                                      │                   │
-│                   └──────────────────────────────────────┘                   │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │

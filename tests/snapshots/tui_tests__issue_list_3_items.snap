@@ -1,6 +1,5 @@
 ---
 source: tests/tui_tests.rs
-assertion_line: 60
 expression: output
 ---
 ┌Issues────────────────────────────────────────────────────────────────────────┐
@@ -26,4 +25,4 @@ expression: output
 │                                                                              │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
-j/k: navigate  n: new  Enter/l: select  q: quit
+j/k: navigate  n: new  a: archive  A: show archived  Enter/l: select  q: quit

@@ -50,6 +50,7 @@ pub struct App {
     pub thread_selected: usize,
     pub pending_edit: Option<EditTarget>,
     pub thread_item_offsets: Vec<usize>,
+    pub show_archived: bool,
 }
 
 impl Default for App {
@@ -78,6 +79,7 @@ impl App {
             thread_selected: 0,
             pending_edit: None,
             thread_item_offsets: Vec::new(),
+            show_archived: false,
         }
     }
 
@@ -163,6 +165,7 @@ mod tests {
                 created_at: "2025-01-01 00:00:00".to_string(),
                 updated_at: "2025-01-01 00:00:00".to_string(),
                 remote_id: None,
+                archived_at: None,
             },
             crate::db::models::Issue {
                 issue_id: 2,
@@ -172,6 +175,7 @@ mod tests {
                 created_at: "2025-01-01 00:00:00".to_string(),
                 updated_at: "2025-01-01 00:00:00".to_string(),
                 remote_id: None,
+                archived_at: None,
             },
         ]
     }
@@ -326,6 +330,7 @@ mod tests {
                     content: "comment2".to_string(),
                 },
             ],
+            archived: false,
         });
         assert_eq!(app.thread_selected, 0);
         assert!(matches!(
@@ -352,6 +357,7 @@ mod tests {
                 created_at: "2025-01-01".to_string(),
                 content: "comment".to_string(),
             }],
+            archived: false,
         });
         app.thread_selected = 1;
         assert!(matches!(
@@ -378,6 +384,7 @@ mod tests {
                 created_at: "2025-01-01".to_string(),
                 content: "comment".to_string(),
             }],
+            archived: false,
         });
         // 1 comment = max index 1 (description=0, comment=1)
         app.thread_selected = 1;
@@ -412,6 +419,7 @@ mod tests {
             updated_at: "2025-01-01".to_string(),
             description: "desc".to_string(),
             comments: vec![],
+            archived: false,
         });
         app.thread_selected = 0;
         assert!(matches!(
@@ -438,6 +446,7 @@ mod tests {
                 created_at: "2025-01-01".to_string(),
                 content: "comment".to_string(),
             }],
+            archived: false,
         });
         app.thread_selected = 1; // comment index
         assert!(matches!(

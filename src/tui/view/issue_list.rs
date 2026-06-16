@@ -43,12 +43,23 @@ pub fn render(f: &mut ratatui::Frame, app: &App) {
         .issues
         .iter()
         .map(|issue| {
-            Row::new(vec![
+            let is_archived = issue.archived_at.is_some();
+            let name_cell = if is_archived {
+                Line::from(format!("[archived] {}", display_name(issue)))
+            } else {
+                Line::from(display_name(issue))
+            };
+            let row = Row::new(vec![
                 Line::from(format!("{}", issue.issue_id)),
-                Line::from(display_name(issue)),
+                name_cell,
                 Line::from(issue.author.clone()),
                 Line::from(issue.updated_at.clone()),
-            ])
+            ]);
+            if is_archived {
+                row.style(Style::default().fg(Color::DarkGray))
+            } else {
+                row
+            }
         })
         .collect();
 
@@ -72,7 +83,9 @@ pub fn render(f: &mut ratatui::Frame, app: &App) {
 
     f.render_stateful_widget(table, chunks[0], &mut state);
 
-    let help = Paragraph::new("j/k: navigate  n: new  Enter/l: select  q: quit")
-        .style(Style::default().fg(Color::DarkGray));
+    let help = Paragraph::new(
+        "j/k: navigate  n: new  a: archive  A: show archived  Enter/l: select  q: quit",
+    )
+    .style(Style::default().fg(Color::DarkGray));
     f.render_widget(help, chunks[1]);
 }
