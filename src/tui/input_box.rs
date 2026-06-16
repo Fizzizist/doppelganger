@@ -317,6 +317,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::absurd_extreme_comparisons)]
     fn input_box_height_clamps_overflow() {
         let mut editor = TextFieldEditor::new(false);
         // Many lines wrapping to exceed u16 range should not panic
