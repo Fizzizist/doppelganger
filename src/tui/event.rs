@@ -218,17 +218,14 @@ pub async fn load_issue_thread(db_path: &str, app: &mut App) -> crate::error::Re
         return Ok(false);
     }
 
-    let issue = &app.issues[issue_idx];
-    let issue_id = issue.issue_id;
+    let issue_id = app.issues[issue_idx].issue_id;
 
     let db = Database::open(db_path).await?;
     let conn = db.conn();
+    let issue = issue::get_by_id(conn, issue_id).await?;
     let comments = comment::list_issue_comments(conn, issue_id).await?;
 
-    let thread = Thread::from(&crate::db::models::IssueWithComments {
-        issue: issue.clone(),
-        comments,
-    });
+    let thread = Thread::from(&crate::db::models::IssueWithComments { issue, comments });
 
     let changed = match &app.thread {
         Some(t) => t.updated_at != thread.updated_at || t.comments.len() != thread.comments.len(),
@@ -260,4 +257,47 @@ pub async fn load_branch_thread(
 
     app.thread = Some(thread);
     Ok(changed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{Database, author, issue as issue_db};
+
+    #[tokio::test]
+    async fn load_issue_thread_reflects_updated_description() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let db_path = tmp.path().join("test.db").to_str().expect("path").to_string();
+
+        let db = Database::open(&db_path).await.expect("open db");
+        let conn = db.conn();
+        let author = author::find_or_create(conn, "Alice", None).await.expect("author");
+        let created = issue_db::create(conn, Some("My Issue"), "original description", author.author_id, None)
+            .await
+            .expect("create issue");
+        db.checkpoint().await.expect("checkpoint");
+        drop(db);
+
+        let mut app = App::new("Alice".to_string(), None);
+        app.issues = vec![created.clone()];
+        load_issue_thread(&db_path, &mut app).await.expect("load thread");
+        assert_eq!(
+            app.thread.as_ref().expect("thread").description,
+            "original description"
+        );
+
+        let db = Database::open(&db_path).await.expect("open db");
+        issue_db::update_description(db.conn(), created.issue_id, "revised description")
+            .await
+            .expect("update description");
+        db.checkpoint().await.expect("checkpoint");
+        drop(db);
+
+        load_issue_thread(&db_path, &mut app).await.expect("reload thread");
+        assert_eq!(
+            app.thread.as_ref().expect("thread").description,
+            "revised description",
+            "thread view must reflect the updated description without a full issues reload"
+        );
+    }
 }
