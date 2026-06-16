@@ -15,38 +15,55 @@ use ratatui::{
 /// not expose its wrap mapping, so this greedy word-wrap is a best-effort match
 /// used to drive selection scroll-follow.
 fn wrapped_row_count(line: &Line, width: u16) -> u16 {
-    use unicode_width::UnicodeWidthStr;
+    use unicode_width::UnicodeWidthChar;
 
-    let width = width.max(1) as usize;
-    let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
-    if text.is_empty() {
-        return 1;
-    }
-
-    let mut rows: u16 = 1;
-    let mut col: usize = 0;
-    for word in text.split_inclusive(' ') {
-        let w = UnicodeWidthStr::width(word);
+    // Greedily place one word-segment (a run of chars ending in a space, matching
+    // `split_inclusive(' ')`) into the current row, wrapping when it overflows.
+    fn place(w: usize, width: usize, rows: &mut u16, col: &mut usize) {
         if w > width {
-            // Word longer than a row: hard-break across multiple rows.
-            if col > 0 {
-                rows = rows.saturating_add(1);
+            // Segment longer than a row: hard-break across multiple rows.
+            if *col > 0 {
+                *rows = rows.saturating_add(1);
             }
             let full = w / width;
             let rem = w % width;
             if rem == 0 {
-                rows = rows.saturating_add(full.saturating_sub(1) as u16);
-                col = width;
+                *rows = rows.saturating_add(full.saturating_sub(1) as u16);
+                *col = width;
             } else {
-                rows = rows.saturating_add(full as u16);
-                col = rem;
+                *rows = rows.saturating_add(full as u16);
+                *col = rem;
             }
-        } else if col + w > width {
-            rows = rows.saturating_add(1);
-            col = w;
+        } else if *col + w > width {
+            *rows = rows.saturating_add(1);
+            *col = w;
         } else {
-            col += w;
+            *col += w;
         }
+    }
+
+    let width = width.max(1) as usize;
+
+    let mut rows: u16 = 1;
+    let mut col: usize = 0;
+    let mut seg_w: usize = 0;
+    let mut any = false;
+    for span in &line.spans {
+        for ch in span.content.chars() {
+            any = true;
+            seg_w += UnicodeWidthChar::width(ch).unwrap_or(0);
+            if ch == ' ' {
+                place(seg_w, width, &mut rows, &mut col);
+                seg_w = 0;
+            }
+        }
+    }
+    if seg_w > 0 {
+        place(seg_w, width, &mut rows, &mut col);
+    }
+
+    if !any {
+        return 1;
     }
     rows
 }
