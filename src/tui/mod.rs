@@ -204,6 +204,7 @@ async fn handle_key_event(
 
 async fn submit_comment(db_path: &str, app: &mut App) -> Result<()> {
     if app.thread.as_ref().map(|t| t.archived).unwrap_or(false) {
+        app.show_error("cannot comment on an archived thread".to_string());
         return Ok(());
     }
 
@@ -973,7 +974,6 @@ mod archive_tests {
         let auth = author::find_or_create(conn, "Alice", None)
             .await
             .expect("author");
-        // Create 3 issues; ordering is DESC so last created = first listed
         issue::create(conn, Some("a"), "desc", auth.author_id, None)
             .await
             .expect("i1");
@@ -989,26 +989,95 @@ mod archive_tests {
         let mut app = App::new("Alice".to_string(), None);
         event::load_issues(&db_path, &mut app).await.expect("load");
         assert_eq!(app.issues.len(), 3);
-        app.selected_issue = 2; // last item
+        app.selected_issue = 2; // hover last item
 
-        // Archive the last visible issue; it will disappear from default list
-        let issue_id_to_archive = app.issues[2].issue_id;
-        let db = Database::open(&db_path).await.expect("open");
-        issue::set_archived(db.conn(), issue_id_to_archive, true)
+        // toggle_archive archives it AND clamps selection
+        toggle_archive(&db_path, &mut app)
+            .await
+            .expect("toggle archive");
+
+        assert_eq!(
+            app.issues.len(),
+            2,
+            "archived issue removed from default list"
+        );
+        assert!(
+            app.selected_issue < app.issues.len(),
+            "selected_issue={} must be < issues.len()={}",
+            app.selected_issue,
+            app.issues.len()
+        );
+    }
+
+    #[tokio::test]
+    async fn jk_navigation_works_on_archived_thread() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let db_path = tmp
+            .path()
+            .join("archived_nav.db")
+            .to_str()
+            .expect("path")
+            .to_string();
+
+        let db = Database::open(&db_path).await.expect("open db");
+        let conn = db.conn();
+        let auth = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        let iss = issue::create(conn, Some("archived issue"), "desc", auth.author_id, None)
+            .await
+            .expect("issue");
+        crate::db::comment::create_issue_comment(conn, iss.issue_id, "comment one", auth.author_id)
+            .await
+            .expect("comment 1");
+        crate::db::comment::create_issue_comment(conn, iss.issue_id, "comment two", auth.author_id)
+            .await
+            .expect("comment 2");
+        issue::set_archived(conn, iss.issue_id, true)
             .await
             .expect("archive");
         db.checkpoint().await.expect("checkpoint");
         drop(db);
 
-        // Now toggle_archive would do it, but we can test clamp via manual set + reload
-        app.last_fingerprint = "FORCE_RELOAD".to_string();
+        let mut app = App::new("Alice".to_string(), None);
+        app.show_archived = true;
+        app.screen = Screen::Thread;
+        app.tui_mode = TuiMode::Issue;
         event::load_issues(&db_path, &mut app)
             .await
-            .expect("reload");
-        // Clamp manually (toggle_archive does this automatically)
-        app.selected_issue = app.selected_issue.min(app.issues.len().saturating_sub(1));
+            .expect("load issues");
+        assert_eq!(app.issues.len(), 1);
+        event::load_issue_thread(&db_path, &mut app)
+            .await
+            .expect("load thread");
 
-        assert_eq!(app.issues.len(), 2);
-        assert!(app.selected_issue < app.issues.len());
+        let thread = app.thread.as_ref().expect("thread");
+        assert!(thread.archived, "thread must be archived");
+        assert_eq!(thread.comments.len(), 2);
+
+        // j should advance selection
+        assert_eq!(app.thread_selected, 0);
+        let result = event::handle_key(
+            &mut app,
+            crossterm::event::KeyCode::Char('j'),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        assert!(matches!(result, KeyResult::Continue));
+        assert_eq!(
+            app.thread_selected, 1,
+            "j should move selection down on archived thread"
+        );
+
+        // k should retreat selection
+        let result = event::handle_key(
+            &mut app,
+            crossterm::event::KeyCode::Char('k'),
+            crossterm::event::KeyModifiers::NONE,
+        );
+        assert!(matches!(result, KeyResult::Continue));
+        assert_eq!(
+            app.thread_selected, 0,
+            "k should move selection up on archived thread"
+        );
     }
 }

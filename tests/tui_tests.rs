@@ -474,3 +474,68 @@ fn thread_selection_not_shown_in_input_focus() {
     let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
     insta::assert_snapshot!("thread_selection_not_shown_in_input_focus", output);
 }
+
+#[test]
+fn thread_render_archived_header() {
+    let mut issue = make_issue(5, Some("Old feature"), "No longer needed.", "Alice");
+    issue.archived_at = Some("2025-06-01 09:00:00".to_string());
+    let thread = Thread::from(&IssueWithComments {
+        issue,
+        comments: Vec::new(),
+    });
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    assert!(
+        output.contains("[ARCHIVED]"),
+        "archived thread header must contain [ARCHIVED], got:\n{output}"
+    );
+    insta::assert_snapshot!("thread_archived_header", output);
+}
+
+#[test]
+fn thread_render_archived_no_input_box() {
+    let mut issue = make_issue(5, Some("Old feature"), "No longer needed.", "Alice");
+    issue.archived_at = Some("2025-06-01 09:00:00".to_string());
+    let thread = Thread::from(&IssueWithComments {
+        issue,
+        comments: Vec::new(),
+    });
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+    // Focus the input box to confirm it still doesn't render when archived
+    app.focus_input_box();
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    assert!(
+        output.contains("[ARCHIVED]"),
+        "archived thread must show header tag"
+    );
+    insta::assert_snapshot!("thread_archived_no_input_box", output);
+}
+
+#[test]
+fn issue_list_show_archived_view() {
+    let mut app = App::default();
+    app.show_archived = true;
+    app.issues = vec![
+        make_issue(1, Some("Active issue"), "Still active", "Alice"),
+        {
+            let mut i = make_issue(2, Some("Done with this"), "Closed out", "Bob");
+            i.archived_at = Some("2025-06-01 09:00:00".to_string());
+            i
+        },
+    ];
+
+    let output = render_to_string(80, 24, |f| view::issue_list::render(f, &app));
+    assert!(
+        output.contains("[archived]"),
+        "A-view must show [archived] marker, got:\n{output}"
+    );
+    insta::assert_snapshot!("issue_list_show_archived_view", output);
+}

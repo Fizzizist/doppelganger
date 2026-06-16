@@ -245,7 +245,11 @@ pub async fn load_issue_thread(db_path: &str, app: &mut App) -> crate::error::Re
         None => true,
     };
 
+    let archived = thread.archived;
     app.thread = Some(thread);
+    if archived && matches!(app.focus, Focus::InputBox) {
+        app.focus_thread();
+    }
     Ok(changed)
 }
 
