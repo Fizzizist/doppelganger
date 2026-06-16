@@ -82,21 +82,6 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
     let total_height = f.area().height;
     let total_width = f.area().width;
     let input_text_width = inner_width(total_width);
-    let input_height = match &app.input_editor {
-        Some(editor) => {
-            input_box_height(editor, max_input_box_height(total_height), input_text_width)
-        }
-        None => 3,
-    };
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(0),
-            Constraint::Length(input_height),
-        ])
-        .split(f.area());
 
     // Clone what we need from the thread to avoid borrow conflicts
     let thread_data = match &app.thread {
@@ -118,13 +103,36 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
                     )
                 })
                 .collect::<Vec<_>>(),
+            t.archived,
         ),
         None => return,
     };
 
-    let (issue_id, title, author, _created_at, updated_at, description, comments) = thread_data;
+    let (issue_id, title, author, _created_at, updated_at, description, comments, archived) =
+        thread_data;
 
-    let header = Paragraph::new(Line::from(vec![
+    // Input area has zero height when thread is archived
+    let input_height = if archived {
+        0
+    } else {
+        match &app.input_editor {
+            Some(editor) => {
+                input_box_height(editor, max_input_box_height(total_height), input_text_width)
+            }
+            None => 3,
+        }
+    };
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(0),
+            Constraint::Length(input_height),
+        ])
+        .split(f.area());
+
+    let mut header_spans = vec![
         Span::styled(
             format!("#{} ", issue_id),
             Style::default().add_modifier(Modifier::BOLD),
@@ -134,8 +142,16 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
         Span::styled(author, Style::default().fg(Color::Yellow)),
         Span::raw("  "),
         Span::styled(updated_at, Style::default().fg(Color::DarkGray)),
-    ]))
-    .block(Block::default().borders(Borders::BOTTOM));
+    ];
+    if archived {
+        header_spans.push(Span::raw("  "));
+        header_spans.push(Span::styled(
+            "[ARCHIVED]",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        ));
+    }
+    let header =
+        Paragraph::new(Line::from(header_spans)).block(Block::default().borders(Borders::BOTTOM));
     f.render_widget(header, chunks[0]);
 
     let renderer = build_renderer(markdown_theme());
@@ -212,7 +228,9 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
         .wrap(Wrap { trim: false });
     f.render_widget(body, chunks[1]);
 
-    render_input_box(f, app, chunks[2]);
+    if !archived {
+        render_input_box(f, app, chunks[2]);
+    }
 }
 
 #[cfg(test)]

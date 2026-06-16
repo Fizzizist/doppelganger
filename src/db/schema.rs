@@ -47,3 +47,4 @@ CREATE TABLE IF NOT EXISTS branch_comment (
 )"#;
 
 pub const ALTER_TABLE_ISSUE_REMOTE_ID: &str = "ALTER TABLE issue ADD COLUMN remote_id TEXT";
+pub const ALTER_TABLE_ISSUE_ARCHIVED_AT: &str = "ALTER TABLE issue ADD COLUMN archived_at TEXT";

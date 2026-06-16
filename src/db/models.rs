@@ -14,6 +14,7 @@ pub struct Issue {
     pub created_at: String,
     pub updated_at: String,
     pub remote_id: Option<String>,
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]

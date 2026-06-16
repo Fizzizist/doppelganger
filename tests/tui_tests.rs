@@ -16,6 +16,7 @@ fn make_issue(id: i64, name: Option<&str>, desc: &str, author: &str) -> Issue {
         created_at: "2025-01-01 00:00:00".to_string(),
         updated_at: "2025-01-02 12:00:00".to_string(),
         remote_id: None,
+        archived_at: None,
     }
 }
 

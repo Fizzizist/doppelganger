@@ -67,6 +67,7 @@ impl Database {
         self.conn.execute(schema::ISSUE_COMMENT_TABLE, ()).await?;
         self.conn.execute(schema::BRANCH_COMMENT_TABLE, ()).await?;
         self.migrate_remote_id().await?;
+        self.migrate_archived_at().await?;
         Ok(())
     }
 
@@ -74,6 +75,18 @@ impl Database {
         match self
             .conn
             .execute(schema::ALTER_TABLE_ISSUE_REMOTE_ID, ())
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) if e.to_string().contains("duplicate column name") => Ok(()),
+            Err(e) => Err(classify_db_error(e)),
+        }
+    }
+
+    async fn migrate_archived_at(&self) -> Result<()> {
+        match self
+            .conn
+            .execute(schema::ALTER_TABLE_ISSUE_ARCHIVED_AT, ())
             .await
         {
             Ok(_) => Ok(()),

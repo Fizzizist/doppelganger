@@ -11,6 +11,8 @@ pub enum KeyResult {
     Quit,
     SubmitComment,
     EditEntity,
+    ToggleArchive,
+    ToggleShowArchived,
 }
 
 pub fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> KeyResult {
@@ -71,6 +73,8 @@ fn handle_issue_list_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) 
             app.start_name_input();
             KeyResult::Continue
         }
+        (KeyCode::Char('a'), _) => KeyResult::ToggleArchive,
+        (KeyCode::Char('A'), _) => KeyResult::ToggleShowArchived,
         _ => KeyResult::Continue,
     }
 }
@@ -80,7 +84,9 @@ fn handle_thread_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> K
         app.ctrl_w_pending = false;
         return match (code, modifiers) {
             (KeyCode::Char('j'), _) => {
-                app.focus_input_box();
+                if !app.thread.as_ref().map(|t| t.archived).unwrap_or(false) {
+                    app.focus_input_box();
+                }
                 KeyResult::Continue
             }
             (KeyCode::Char('k'), _) => {
@@ -124,6 +130,9 @@ fn handle_thread_focus_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers
             KeyResult::Continue
         }
         (KeyCode::Char('e'), _) => {
+            if app.thread.as_ref().map(|t| t.archived).unwrap_or(false) {
+                return KeyResult::Continue;
+            }
             let Some(thread) = &app.thread else {
                 return KeyResult::Continue;
             };
@@ -196,7 +205,11 @@ pub fn handle_thread_scroll(app: &mut App, code: KeyCode, modifiers: KeyModifier
 pub async fn load_issues(db_path: &str, app: &mut App) -> crate::error::Result<bool> {
     let db = Database::open(db_path).await?;
     let conn = db.conn();
-    let issues = issue::list(conn).await?;
+    let issues = if app.show_archived {
+        issue::list_all(conn).await?
+    } else {
+        issue::list(conn).await?
+    };
 
     let fingerprint: String = issues
         .iter()
@@ -316,5 +329,66 @@ mod tests {
             "revised description",
             "thread view must reflect the updated description without a full issues reload"
         );
+    }
+
+    #[test]
+    fn key_a_on_issue_list_returns_toggle_archive() {
+        let mut app = App::default();
+        assert!(matches!(
+            handle_key(&mut app, KeyCode::Char('a'), KeyModifiers::NONE),
+            KeyResult::ToggleArchive
+        ));
+    }
+
+    #[test]
+    fn key_shift_a_on_issue_list_returns_toggle_show_archived() {
+        let mut app = App::default();
+        assert!(matches!(
+            handle_key(&mut app, KeyCode::Char('A'), KeyModifiers::NONE),
+            KeyResult::ToggleShowArchived
+        ));
+    }
+
+    #[test]
+    fn key_e_no_op_when_thread_archived() {
+        let mut app = App::default();
+        app.screen = Screen::Thread;
+        app.thread = Some(Thread {
+            issue_id: 1,
+            title: "Test".to_string(),
+            author: "Alice".to_string(),
+            created_at: "2025-01-01".to_string(),
+            updated_at: "2025-01-01".to_string(),
+            description: "desc".to_string(),
+            comments: vec![],
+            archived: true,
+        });
+        assert!(matches!(
+            handle_key(&mut app, KeyCode::Char('e'), KeyModifiers::NONE),
+            KeyResult::Continue
+        ));
+        assert!(app.pending_edit.is_none());
+    }
+
+    #[test]
+    fn ctrl_w_j_blocked_when_thread_archived() {
+        let mut app = App::new("test".to_string(), None);
+        app.screen = Screen::Thread;
+        app.thread = Some(Thread {
+            issue_id: 1,
+            title: "Test".to_string(),
+            author: "Alice".to_string(),
+            created_at: "2025-01-01".to_string(),
+            updated_at: "2025-01-01".to_string(),
+            description: "desc".to_string(),
+            comments: vec![],
+            archived: true,
+        });
+        handle_key(&mut app, KeyCode::Char('w'), KeyModifiers::CONTROL);
+        assert!(app.ctrl_w_pending);
+        handle_key(&mut app, KeyCode::Char('j'), KeyModifiers::NONE);
+        assert!(!app.ctrl_w_pending);
+        assert!(matches!(app.focus, Focus::Thread));
+        assert!(app.input_editor.is_none());
     }
 }

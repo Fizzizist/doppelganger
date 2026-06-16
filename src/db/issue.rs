@@ -41,7 +41,7 @@ pub async fn get_by_id(conn: &turso::Connection, issue_id: i64) -> Result<Issue>
     let mut rows = conn
         .query(
             "SELECT issue.issue_id, issue.name, issue.description, author.name, \
-             issue.created_at, issue.updated_at, issue.remote_id \
+             issue.created_at, issue.updated_at, issue.remote_id, issue.archived_at \
              FROM issue JOIN author ON issue.author_id = author.author_id \
              WHERE issue.issue_id = ?1",
             turso::params::Params::Positional(vec![Value::Integer(issue_id)]),
@@ -58,7 +58,26 @@ pub async fn list(conn: &turso::Connection) -> Result<Vec<Issue>> {
     let mut rows = conn
         .query(
             "SELECT issue.issue_id, issue.name, issue.description, author.name, \
-             issue.created_at, issue.updated_at, issue.remote_id \
+             issue.created_at, issue.updated_at, issue.remote_id, issue.archived_at \
+             FROM issue JOIN author ON issue.author_id = author.author_id \
+             WHERE issue.archived_at IS NULL \
+             ORDER BY issue.updated_at DESC, issue.issue_id DESC",
+            (),
+        )
+        .await?;
+
+    let mut issues = Vec::new();
+    while let Some(row) = rows.next().await? {
+        issues.push(row_to_issue(&row)?);
+    }
+    Ok(issues)
+}
+
+pub async fn list_all(conn: &turso::Connection) -> Result<Vec<Issue>> {
+    let mut rows = conn
+        .query(
+            "SELECT issue.issue_id, issue.name, issue.description, author.name, \
+             issue.created_at, issue.updated_at, issue.remote_id, issue.archived_at \
              FROM issue JOIN author ON issue.author_id = author.author_id \
              ORDER BY issue.updated_at DESC, issue.issue_id DESC",
             (),
@@ -72,11 +91,25 @@ pub async fn list(conn: &turso::Connection) -> Result<Vec<Issue>> {
     Ok(issues)
 }
 
+pub async fn set_archived(conn: &turso::Connection, issue_id: i64, archived: bool) -> Result<()> {
+    let sql = if archived {
+        "UPDATE issue SET archived_at = datetime('now'), updated_at = datetime('now') WHERE issue_id = ?1"
+    } else {
+        "UPDATE issue SET archived_at = NULL, updated_at = datetime('now') WHERE issue_id = ?1"
+    };
+    conn.execute(
+        sql,
+        turso::params::Params::Positional(vec![Value::Integer(issue_id)]),
+    )
+    .await?;
+    Ok(())
+}
+
 pub async fn get_by_remote_id(conn: &turso::Connection, remote_id: &str) -> Result<Issue> {
     let mut rows = conn
         .query(
             "SELECT issue.issue_id, issue.name, issue.description, author.name, \
-             issue.created_at, issue.updated_at, issue.remote_id \
+             issue.created_at, issue.updated_at, issue.remote_id, issue.archived_at \
              FROM issue JOIN author ON issue.author_id = author.author_id \
              WHERE issue.remote_id = ?1",
             turso::params::Params::Positional(vec![Value::Text(remote_id.to_string())]),
@@ -110,7 +143,7 @@ pub async fn update_for_sync(
 
     conn.execute(
         "UPDATE issue SET name = ?1, description = ?2, author_id = ?3, remote_id = ?4, \
-         updated_at = datetime('now') WHERE issue_id = ?5",
+         archived_at = NULL, updated_at = datetime('now') WHERE issue_id = ?5",
         turso::params::Params::Positional(vec![
             name_value,
             Value::Text(description.to_string()),
@@ -151,6 +184,7 @@ fn row_to_issue(row: &turso::Row) -> Result<Issue> {
         created_at: extract_text(row, 4)?,
         updated_at: extract_text(row, 5)?,
         remote_id: extract_optional_text(row, 6)?,
+        archived_at: extract_optional_text(row, 7)?,
     })
 }
 
@@ -188,5 +222,147 @@ mod tests {
             updated.updated_at >= original.updated_at,
             "updated_at must not go backwards"
         );
+    }
+
+    #[tokio::test]
+    async fn set_archived_archives_issue() {
+        let db = Database::open_in_memory().await.expect("open in-memory db");
+        let conn = db.conn();
+        let author = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        let issue = super::create(conn, Some("test"), "desc", author.author_id, None)
+            .await
+            .expect("create");
+        assert!(issue.archived_at.is_none());
+
+        super::set_archived(conn, issue.issue_id, true)
+            .await
+            .expect("archive");
+        let fetched = super::get_by_id(conn, issue.issue_id).await.expect("get");
+        assert!(fetched.archived_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn set_archived_unarchives_issue() {
+        let db = Database::open_in_memory().await.expect("open in-memory db");
+        let conn = db.conn();
+        let author = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        let issue = super::create(conn, Some("test"), "desc", author.author_id, None)
+            .await
+            .expect("create");
+
+        super::set_archived(conn, issue.issue_id, true)
+            .await
+            .expect("archive");
+        super::set_archived(conn, issue.issue_id, false)
+            .await
+            .expect("unarchive");
+        let fetched = super::get_by_id(conn, issue.issue_id).await.expect("get");
+        assert!(fetched.archived_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn list_excludes_archived() {
+        let db = Database::open_in_memory().await.expect("open in-memory db");
+        let conn = db.conn();
+        let author = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        let i1 = super::create(conn, Some("active"), "desc", author.author_id, None)
+            .await
+            .expect("create i1");
+        let i2 = super::create(conn, Some("to archive"), "desc", author.author_id, None)
+            .await
+            .expect("create i2");
+
+        super::set_archived(conn, i2.issue_id, true)
+            .await
+            .expect("archive i2");
+
+        let listed = super::list(conn).await.expect("list");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].issue_id, i1.issue_id);
+    }
+
+    #[tokio::test]
+    async fn list_all_includes_archived() {
+        let db = Database::open_in_memory().await.expect("open in-memory db");
+        let conn = db.conn();
+        let author = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        let i1 = super::create(conn, Some("active"), "desc", author.author_id, None)
+            .await
+            .expect("create i1");
+        let i2 = super::create(conn, Some("archived"), "desc", author.author_id, None)
+            .await
+            .expect("create i2");
+
+        super::set_archived(conn, i2.issue_id, true)
+            .await
+            .expect("archive i2");
+
+        let all = super::list_all(conn).await.expect("list_all");
+        let ids: Vec<i64> = all.iter().map(|i| i.issue_id).collect();
+        assert!(ids.contains(&i1.issue_id));
+        assert!(ids.contains(&i2.issue_id));
+        assert_eq!(all.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn update_for_sync_clears_archived_at() {
+        let db = Database::open_in_memory().await.expect("open in-memory db");
+        let conn = db.conn();
+        let author = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        let issue = super::create(conn, Some("test"), "desc", author.author_id, Some("r1"))
+            .await
+            .expect("create");
+
+        super::set_archived(conn, issue.issue_id, true)
+            .await
+            .expect("archive");
+        let archived = super::get_by_id(conn, issue.issue_id)
+            .await
+            .expect("get archived");
+        assert!(archived.archived_at.is_some());
+
+        super::update_for_sync(
+            conn,
+            issue.issue_id,
+            Some("test"),
+            "new desc",
+            author.author_id,
+            Some("r1"),
+        )
+        .await
+        .expect("sync");
+        let synced = super::get_by_id(conn, issue.issue_id)
+            .await
+            .expect("get synced");
+        assert!(
+            synced.archived_at.is_none(),
+            "update_for_sync must clear archived_at"
+        );
+    }
+
+    #[tokio::test]
+    async fn migration_idempotent() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let db_path = tmp
+            .path()
+            .join("idem.db")
+            .to_str()
+            .expect("path")
+            .to_string();
+        let db = Database::open(&db_path).await.expect("first open");
+        drop(db);
+        // Second open runs migrate again — must not error on duplicate column
+        let db2 = Database::open(&db_path).await.expect("second open");
+        drop(db2);
     }
 }

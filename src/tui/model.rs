@@ -10,6 +10,7 @@ pub struct Thread {
     pub updated_at: String,
     pub description: String,
     pub comments: Vec<ThreadComment>,
+    pub archived: bool,
 }
 
 pub struct ThreadComment {
@@ -34,6 +35,7 @@ impl From<&Issue> for Thread {
             updated_at: issue.updated_at.clone(),
             description: issue.description.clone(),
             comments: Vec::new(),
+            archived: issue.archived_at.is_some(),
         }
     }
 }
@@ -56,6 +58,7 @@ impl From<&Branch> for Thread {
             updated_at: branch.updated_at.clone(),
             description: branch.description.clone(),
             comments: Vec::new(),
+            archived: false,
         }
     }
 }
@@ -113,6 +116,7 @@ mod tests {
             created_at: "2025-01-01 00:00:00".to_string(),
             updated_at: "2025-01-02 00:00:00".to_string(),
             remote_id: None,
+            archived_at: None,
         }
     }
 

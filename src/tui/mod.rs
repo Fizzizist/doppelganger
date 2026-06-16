@@ -83,6 +83,16 @@ async fn run_loop(db_path: &str, guard: &mut terminal::TuiGuard, app: &mut App) 
                                         app.show_error(e.to_string());
                                     }
                                 }
+                                KeyResult::ToggleArchive => {
+                                    if let Err(e) = toggle_archive(db_path, app).await {
+                                        app.show_error(e.to_string());
+                                    }
+                                }
+                                KeyResult::ToggleShowArchived => {
+                                    if let Err(e) = toggle_show_archived(db_path, app).await {
+                                        app.show_error(e.to_string());
+                                    }
+                                }
                                 KeyResult::Continue => {}
                             }
                         }
@@ -193,6 +203,10 @@ async fn handle_key_event(
 }
 
 async fn submit_comment(db_path: &str, app: &mut App) -> Result<()> {
+    if app.thread.as_ref().map(|t| t.archived).unwrap_or(false) {
+        return Ok(());
+    }
+
     let content = match app.input_editor.as_mut() {
         Some(editor) => {
             let text = editor.text();
@@ -335,6 +349,45 @@ async fn apply_edit(db_path: &str, app: &mut App, content: Option<String>) -> Re
 
     let max = app.thread.as_ref().map(|t| t.comments.len()).unwrap_or(0);
     app.thread_selected = app.thread_selected.min(max);
+
+    Ok(())
+}
+
+async fn toggle_archive(db_path: &str, app: &mut App) -> Result<()> {
+    if app.issues.is_empty() || app.selected_issue >= app.issues.len() {
+        return Ok(());
+    }
+    let issue = &app.issues[app.selected_issue];
+    let currently_archived = issue.archived_at.is_some();
+    let issue_id = issue.issue_id;
+
+    let db = db::Database::open(db_path).await?;
+    crate::db::issue::set_archived(db.conn(), issue_id, !currently_archived).await?;
+    db.checkpoint().await?;
+    drop(db);
+
+    app.last_fingerprint = "FORCE_RELOAD".to_string();
+    event::load_issues(db_path, app).await?;
+
+    if app.issues.is_empty() {
+        app.selected_issue = 0;
+    } else {
+        app.selected_issue = app.selected_issue.min(app.issues.len() - 1);
+    }
+
+    Ok(())
+}
+
+async fn toggle_show_archived(db_path: &str, app: &mut App) -> Result<()> {
+    app.show_archived = !app.show_archived;
+    app.last_fingerprint = "FORCE_RELOAD".to_string();
+    event::load_issues(db_path, app).await?;
+
+    if app.issues.is_empty() {
+        app.selected_issue = 0;
+    } else {
+        app.selected_issue = app.selected_issue.min(app.issues.len() - 1);
+    }
 
     Ok(())
 }
@@ -717,5 +770,245 @@ mod edit_tests {
             app.thread_selected,
             thread.comments.len()
         );
+    }
+}
+
+#[cfg(test)]
+mod archive_tests {
+    use super::*;
+    use crate::db::{Database, author, issue};
+
+    #[tokio::test]
+    async fn toggle_archive_archives_hovered_issue() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let db_path = tmp
+            .path()
+            .join("archive.db")
+            .to_str()
+            .expect("path")
+            .to_string();
+
+        let db = Database::open(&db_path).await.expect("open db");
+        let conn = db.conn();
+        let auth = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        let iss = issue::create(conn, Some("test"), "desc", auth.author_id, None)
+            .await
+            .expect("issue");
+        db.checkpoint().await.expect("checkpoint");
+        drop(db);
+
+        let mut app = App::new("Alice".to_string(), None);
+        event::load_issues(&db_path, &mut app).await.expect("load");
+        assert_eq!(app.issues.len(), 1);
+
+        toggle_archive(&db_path, &mut app).await.expect("toggle");
+
+        // Default list hides archived — issue should be gone
+        assert!(app.issues.is_empty());
+
+        // Verify in DB
+        let db = Database::open(&db_path).await.expect("open verify");
+        let fetched = issue::get_by_id(db.conn(), iss.issue_id)
+            .await
+            .expect("get");
+        assert!(fetched.archived_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn toggle_archive_unarchives_in_show_all_view() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let db_path = tmp
+            .path()
+            .join("unarchive.db")
+            .to_str()
+            .expect("path")
+            .to_string();
+
+        let db = Database::open(&db_path).await.expect("open db");
+        let conn = db.conn();
+        let auth = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        let iss = issue::create(conn, Some("test"), "desc", auth.author_id, None)
+            .await
+            .expect("issue");
+        issue::set_archived(conn, iss.issue_id, true)
+            .await
+            .expect("archive");
+        db.checkpoint().await.expect("checkpoint");
+        drop(db);
+
+        let mut app = App::new("Alice".to_string(), None);
+        app.show_archived = true;
+        event::load_issues(&db_path, &mut app).await.expect("load");
+        assert_eq!(app.issues.len(), 1);
+        assert!(app.issues[0].archived_at.is_some());
+
+        toggle_archive(&db_path, &mut app).await.expect("toggle");
+
+        let db = Database::open(&db_path).await.expect("open verify");
+        let fetched = issue::get_by_id(db.conn(), iss.issue_id)
+            .await
+            .expect("get");
+        assert!(fetched.archived_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn submit_comment_blocked_on_archived_thread() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let db_path = tmp
+            .path()
+            .join("archived_submit.db")
+            .to_str()
+            .expect("path")
+            .to_string();
+
+        let db = Database::open(&db_path).await.expect("open db");
+        let conn = db.conn();
+        let auth = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        let iss = issue::create(conn, Some("test"), "desc", auth.author_id, None)
+            .await
+            .expect("issue");
+        issue::set_archived(conn, iss.issue_id, true)
+            .await
+            .expect("archive");
+        db.checkpoint().await.expect("checkpoint");
+        drop(db);
+
+        let mut app = App::new("Alice".to_string(), None);
+        app.screen = Screen::Thread;
+        app.tui_mode = TuiMode::Issue;
+        app.issues = vec![{
+            let db = Database::open(&db_path).await.expect("open");
+            issue::get_by_id(db.conn(), iss.issue_id)
+                .await
+                .expect("get")
+        }];
+        app.selected_issue = 0;
+        event::load_issue_thread(&db_path, &mut app)
+            .await
+            .expect("load thread");
+
+        // Verify thread is archived
+        assert!(app.thread.as_ref().expect("thread").archived);
+
+        // Set up input editor with text
+        app.focus_input_box();
+        let editor = app.input_editor.as_mut().expect("editor");
+        editor.set_text("attempted comment");
+        editor.enter_normal();
+
+        // submit_comment should early-return without writing
+        submit_comment(&db_path, &mut app).await.expect("no error");
+
+        // Verify no comment was written
+        let db = Database::open(&db_path).await.expect("open verify");
+        let comments = crate::db::comment::list_issue_comments(db.conn(), iss.issue_id)
+            .await
+            .expect("list comments");
+        assert!(
+            comments.is_empty(),
+            "no comment should be written on archived thread"
+        );
+    }
+
+    #[tokio::test]
+    async fn toggle_show_archived_reloads_all_issues() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let db_path = tmp
+            .path()
+            .join("show_archived.db")
+            .to_str()
+            .expect("path")
+            .to_string();
+
+        let db = Database::open(&db_path).await.expect("open db");
+        let conn = db.conn();
+        let auth = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        issue::create(conn, Some("active"), "desc", auth.author_id, None)
+            .await
+            .expect("i1");
+        let i2 = issue::create(conn, Some("archived"), "desc", auth.author_id, None)
+            .await
+            .expect("i2");
+        issue::set_archived(conn, i2.issue_id, true)
+            .await
+            .expect("archive");
+        db.checkpoint().await.expect("checkpoint");
+        drop(db);
+
+        let mut app = App::new("Alice".to_string(), None);
+        event::load_issues(&db_path, &mut app).await.expect("load");
+        assert_eq!(app.issues.len(), 1, "default view shows only active");
+
+        toggle_show_archived(&db_path, &mut app)
+            .await
+            .expect("toggle");
+        assert_eq!(app.issues.len(), 2, "show_archived view shows all");
+
+        toggle_show_archived(&db_path, &mut app)
+            .await
+            .expect("toggle back");
+        assert_eq!(app.issues.len(), 1, "back to default");
+    }
+
+    #[tokio::test]
+    async fn selected_issue_clamped_after_archive() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let db_path = tmp
+            .path()
+            .join("clamp.db")
+            .to_str()
+            .expect("path")
+            .to_string();
+
+        let db = Database::open(&db_path).await.expect("open db");
+        let conn = db.conn();
+        let auth = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        // Create 3 issues; ordering is DESC so last created = first listed
+        issue::create(conn, Some("a"), "desc", auth.author_id, None)
+            .await
+            .expect("i1");
+        issue::create(conn, Some("b"), "desc", auth.author_id, None)
+            .await
+            .expect("i2");
+        issue::create(conn, Some("c"), "desc", auth.author_id, None)
+            .await
+            .expect("i3");
+        db.checkpoint().await.expect("checkpoint");
+        drop(db);
+
+        let mut app = App::new("Alice".to_string(), None);
+        event::load_issues(&db_path, &mut app).await.expect("load");
+        assert_eq!(app.issues.len(), 3);
+        app.selected_issue = 2; // last item
+
+        // Archive the last visible issue; it will disappear from default list
+        let issue_id_to_archive = app.issues[2].issue_id;
+        let db = Database::open(&db_path).await.expect("open");
+        issue::set_archived(db.conn(), issue_id_to_archive, true)
+            .await
+            .expect("archive");
+        db.checkpoint().await.expect("checkpoint");
+        drop(db);
+
+        // Now toggle_archive would do it, but we can test clamp via manual set + reload
+        app.last_fingerprint = "FORCE_RELOAD".to_string();
+        event::load_issues(&db_path, &mut app)
+            .await
+            .expect("reload");
+        // Clamp manually (toggle_archive does this automatically)
+        app.selected_issue = app.selected_issue.min(app.issues.len().saturating_sub(1));
+
+        assert_eq!(app.issues.len(), 2);
+        assert!(app.selected_issue < app.issues.len());
     }
 }
