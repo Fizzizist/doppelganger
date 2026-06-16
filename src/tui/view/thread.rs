@@ -10,6 +10,47 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
+/// Approximates the number of visual rows a line occupies once ratatui
+/// word-wraps it at `width` columns (with `Wrap { trim: false }`). ratatui does
+/// not expose its wrap mapping, so this greedy word-wrap is a best-effort match
+/// used to drive selection scroll-follow.
+fn wrapped_row_count(line: &Line, width: u16) -> u16 {
+    use unicode_width::UnicodeWidthStr;
+
+    let width = width.max(1) as usize;
+    let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+    if text.is_empty() {
+        return 1;
+    }
+
+    let mut rows: u16 = 1;
+    let mut col: usize = 0;
+    for word in text.split_inclusive(' ') {
+        let w = UnicodeWidthStr::width(word);
+        if w > width {
+            // Word longer than a row: hard-break across multiple rows.
+            if col > 0 {
+                rows = rows.saturating_add(1);
+            }
+            let full = w / width;
+            let rem = w % width;
+            if rem == 0 {
+                rows = rows.saturating_add(full.saturating_sub(1) as u16);
+                col = width;
+            } else {
+                rows = rows.saturating_add(full as u16);
+                col = rem;
+            }
+        } else if col + w > width {
+            rows = rows.saturating_add(1);
+            col = w;
+        } else {
+            col += w;
+        }
+    }
+    rows
+}
+
 fn markdown_theme() -> the_other_tui_markdown::Theme {
     the_other_tui_markdown::Theme {
         code_block: Style::new().fg(Color::Gray),
@@ -83,17 +124,13 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
 
     let renderer = build_renderer(markdown_theme());
 
-    // Track item line starts
-    let mut item_line_starts: Vec<usize> = Vec::new();
+    // Track which item each body line belongs to (0 = description, 1.. = comments)
     let mut item_for_line: Vec<usize> = Vec::new();
-
     let mut body_lines: Vec<Line> = Vec::new();
 
     // Item 0: description
-    item_line_starts.push(0);
     let desc_text = the_other_tui_markdown::into_text_with_renderer(&description, &renderer);
-    let desc_line_count = desc_text.lines.len();
-    item_for_line.extend(std::iter::repeat_n(0, desc_line_count));
+    item_for_line.extend(std::iter::repeat_n(0, desc_text.lines.len()));
     for line in desc_text.lines {
         body_lines.push(line);
     }
@@ -101,8 +138,7 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
     // Items 1..n: comments
     for (ci, (_comment_id, author, created_at, content)) in comments.iter().enumerate() {
         let item_idx = ci + 1;
-        item_line_starts.push(body_lines.len());
-        item_for_line.push(item_idx); // blank line
+        item_for_line.push(item_idx); // blank separator line
         body_lines.push(Line::from(""));
         item_for_line.push(item_idx); // header line
         body_lines.push(Line::from(vec![
@@ -116,9 +152,6 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
             body_lines.push(line);
         }
     }
-
-    // Update app with item line starts for scroll-follow
-    app.item_line_starts = item_line_starts;
 
     // Apply gutter highlight (only when Focus::Thread)
     let selected = app.thread_selected;
@@ -139,10 +172,69 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
         })
         .collect();
 
+    // Compute the visual (post-wrap) row offset of each item's first line so
+    // that j/k scroll-follow lands on the right row even when items wrap past
+    // the viewport height. Wrapping is recomputed here at the real body width
+    // because ratatui does not expose its own wrap mapping.
+    let body_width = chunks[1].width;
+    let item_count = comments.len() + 1;
+    let mut item_starts = vec![0usize; item_count];
+    let mut seen = vec![false; item_count];
+    let mut cum_rows = 0usize;
+    for (i, line) in body_lines.iter().enumerate() {
+        let item = item_for_line.get(i).copied().unwrap_or(0);
+        if item < item_count && !seen[item] {
+            item_starts[item] = cum_rows;
+            seen[item] = true;
+        }
+        cum_rows += wrapped_row_count(line, body_width) as usize;
+    }
+    app.item_line_starts = item_starts;
+
     let body = Paragraph::new(body_lines)
         .scroll((app.thread_scroll, 0))
         .wrap(Wrap { trim: false });
     f.render_widget(body, chunks[1]);
 
     render_input_box(f, app, chunks[2]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wrapped_row_count;
+    use ratatui::text::Line;
+
+    #[test]
+    fn empty_line_is_one_row() {
+        assert_eq!(wrapped_row_count(&Line::from(""), 10), 1);
+    }
+
+    #[test]
+    fn short_line_fits_one_row() {
+        assert_eq!(wrapped_row_count(&Line::from("hello"), 10), 1);
+    }
+
+    #[test]
+    fn word_wraps_to_next_row() {
+        // "hello world" = 11 cols at width 8 -> "hello " then "world"
+        assert_eq!(wrapped_row_count(&Line::from("hello world"), 8), 2);
+    }
+
+    #[test]
+    fn long_text_wraps_to_multiple_rows() {
+        let text = "one two three four five six seven eight nine ten";
+        // width 10 forces several wraps; logical line count would be 1
+        assert!(wrapped_row_count(&Line::from(text), 10) >= 4);
+    }
+
+    #[test]
+    fn single_word_longer_than_width_hard_breaks() {
+        // 25-char unbroken word at width 10 -> ceil(25/10) = 3 rows
+        assert_eq!(wrapped_row_count(&Line::from("a".repeat(25)), 10), 3);
+    }
+
+    #[test]
+    fn zero_width_does_not_panic() {
+        assert!(wrapped_row_count(&Line::from("hello"), 0) >= 1);
+    }
 }

@@ -267,20 +267,35 @@ mod tests {
     #[tokio::test]
     async fn load_issue_thread_reflects_updated_description() {
         let tmp = tempfile::tempdir().expect("temp dir");
-        let db_path = tmp.path().join("test.db").to_str().expect("path").to_string();
+        let db_path = tmp
+            .path()
+            .join("test.db")
+            .to_str()
+            .expect("path")
+            .to_string();
 
         let db = Database::open(&db_path).await.expect("open db");
         let conn = db.conn();
-        let author = author::find_or_create(conn, "Alice", None).await.expect("author");
-        let created = issue_db::create(conn, Some("My Issue"), "original description", author.author_id, None)
+        let author = author::find_or_create(conn, "Alice", None)
             .await
-            .expect("create issue");
+            .expect("author");
+        let created = issue_db::create(
+            conn,
+            Some("My Issue"),
+            "original description",
+            author.author_id,
+            None,
+        )
+        .await
+        .expect("create issue");
         db.checkpoint().await.expect("checkpoint");
         drop(db);
 
         let mut app = App::new("Alice".to_string(), None);
         app.issues = vec![created.clone()];
-        load_issue_thread(&db_path, &mut app).await.expect("load thread");
+        load_issue_thread(&db_path, &mut app)
+            .await
+            .expect("load thread");
         assert_eq!(
             app.thread.as_ref().expect("thread").description,
             "original description"
@@ -293,7 +308,9 @@ mod tests {
         db.checkpoint().await.expect("checkpoint");
         drop(db);
 
-        load_issue_thread(&db_path, &mut app).await.expect("reload thread");
+        load_issue_thread(&db_path, &mut app)
+            .await
+            .expect("reload thread");
         assert_eq!(
             app.thread.as_ref().expect("thread").description,
             "revised description",
