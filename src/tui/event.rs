@@ -111,14 +111,14 @@ fn handle_thread_focus_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers
         (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
             let max = app.thread.as_ref().map(|t| t.comments.len()).unwrap_or(0);
             app.thread_selected = (app.thread_selected + 1).min(max);
-            if let Some(&start) = app.item_line_starts.get(app.thread_selected) {
+            if let Some(&start) = app.thread_item_offsets.get(app.thread_selected) {
                 app.thread_scroll = start as u16;
             }
             KeyResult::Continue
         }
         (KeyCode::Char('k'), _) | (KeyCode::Up, _) => {
             app.thread_selected = app.thread_selected.saturating_sub(1);
-            if let Some(&start) = app.item_line_starts.get(app.thread_selected) {
+            if let Some(&start) = app.thread_item_offsets.get(app.thread_selected) {
                 app.thread_scroll = start as u16;
             }
             KeyResult::Continue

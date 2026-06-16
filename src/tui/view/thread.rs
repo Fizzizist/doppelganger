@@ -206,7 +206,7 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
         }
         cum_rows += wrapped_row_count(line, body_width) as usize;
     }
-    app.item_line_starts = item_starts;
+    app.thread_item_offsets = item_starts;
 
     let body = Paragraph::new(body_lines)
         .scroll((app.thread_scroll, 0))

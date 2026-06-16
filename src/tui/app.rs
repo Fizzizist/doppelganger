@@ -49,7 +49,7 @@ pub struct App {
     pub tui_mode: TuiMode,
     pub thread_selected: usize,
     pub pending_edit: Option<EditTarget>,
-    pub item_line_starts: Vec<usize>,
+    pub thread_item_offsets: Vec<usize>,
 }
 
 impl Default for App {
@@ -77,7 +77,7 @@ impl App {
             tui_mode: TuiMode::default(),
             thread_selected: 0,
             pending_edit: None,
-            item_line_starts: Vec::new(),
+            thread_item_offsets: Vec::new(),
         }
     }
 
@@ -138,7 +138,7 @@ impl App {
                 self.input_editor = None;
                 self.thread_selected = 0;
                 self.pending_edit = None;
-                self.item_line_starts.clear();
+                self.thread_item_offsets.clear();
             }
             Screen::IssueList => {}
         }
