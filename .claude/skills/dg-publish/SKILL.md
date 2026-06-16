@@ -83,7 +83,9 @@ Update task: docs → completed, post → in_progress.
 
 ## Step 4: Post PR/MR
 
-Use `glab` is place of `gh` here if the repo is hosted on GitLab.
+Use `glab` in place of `gh` here if the repo is hosted on GitLab.
+
+`<remote_issue_id>` here is the issue ID from the remote issue. This can be found in the output of `dg issue read <N>`. If the remote issue in null, then you can omit `Closes #<remote_issue_id>`. _Don't_ put the local dg issue ID (N) in it's place.
 
 ```sh
 git push -u origin feature/issue-<N>-<slug>

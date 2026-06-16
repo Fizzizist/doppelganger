@@ -3,13 +3,14 @@ use hjkl_editor_tui::crossterm_key_event_to_input;
 use hjkl_engine::{VimMode, decode_planned_input};
 
 use crate::db::{Database, comment, issue};
-use crate::tui::app::{App, Focus, ModalState, Screen};
+use crate::tui::app::{App, EditTarget, Focus, ModalState, Screen};
 use crate::tui::model::Thread;
 
 pub enum KeyResult {
     Continue,
     Quit,
     SubmitComment,
+    EditEntity,
 }
 
 pub fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> KeyResult {
@@ -107,6 +108,38 @@ fn handle_thread_focus_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers
             app.back();
             KeyResult::Continue
         }
+        (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
+            let max = app.thread.as_ref().map(|t| t.comments.len()).unwrap_or(0);
+            app.thread_selected = (app.thread_selected + 1).min(max);
+            if let Some(&start) = app.thread_item_offsets.get(app.thread_selected) {
+                app.thread_scroll = start as u16;
+            }
+            KeyResult::Continue
+        }
+        (KeyCode::Char('k'), _) | (KeyCode::Up, _) => {
+            app.thread_selected = app.thread_selected.saturating_sub(1);
+            if let Some(&start) = app.thread_item_offsets.get(app.thread_selected) {
+                app.thread_scroll = start as u16;
+            }
+            KeyResult::Continue
+        }
+        (KeyCode::Char('e'), _) => {
+            let Some(thread) = &app.thread else {
+                return KeyResult::Continue;
+            };
+            let target = if app.thread_selected == 0 {
+                EditTarget::Description
+            } else {
+                let idx = app.thread_selected - 1;
+                if idx < thread.comments.len() {
+                    EditTarget::Comment(thread.comments[idx].comment_id)
+                } else {
+                    return KeyResult::Continue;
+                }
+            };
+            app.pending_edit = Some(target);
+            KeyResult::EditEntity
+        }
         _ => {
             handle_thread_scroll(app, code, modifiers);
             KeyResult::Continue
@@ -150,12 +183,6 @@ fn handle_input_box_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -
 
 pub fn handle_thread_scroll(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
     match (code, modifiers) {
-        (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
-            app.thread_scroll = app.thread_scroll.saturating_add(1);
-        }
-        (KeyCode::Char('k'), _) | (KeyCode::Up, _) => {
-            app.thread_scroll = app.thread_scroll.saturating_sub(1);
-        }
         (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
             app.thread_scroll = app.thread_scroll.saturating_sub(20);
         }
@@ -191,17 +218,14 @@ pub async fn load_issue_thread(db_path: &str, app: &mut App) -> crate::error::Re
         return Ok(false);
     }
 
-    let issue = &app.issues[issue_idx];
-    let issue_id = issue.issue_id;
+    let issue_id = app.issues[issue_idx].issue_id;
 
     let db = Database::open(db_path).await?;
     let conn = db.conn();
+    let issue = issue::get_by_id(conn, issue_id).await?;
     let comments = comment::list_issue_comments(conn, issue_id).await?;
 
-    let thread = Thread::from(&crate::db::models::IssueWithComments {
-        issue: issue.clone(),
-        comments,
-    });
+    let thread = Thread::from(&crate::db::models::IssueWithComments { issue, comments });
 
     let changed = match &app.thread {
         Some(t) => t.updated_at != thread.updated_at || t.comments.len() != thread.comments.len(),
@@ -233,4 +257,64 @@ pub async fn load_branch_thread(
 
     app.thread = Some(thread);
     Ok(changed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{Database, author, issue as issue_db};
+
+    #[tokio::test]
+    async fn load_issue_thread_reflects_updated_description() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let db_path = tmp
+            .path()
+            .join("test.db")
+            .to_str()
+            .expect("path")
+            .to_string();
+
+        let db = Database::open(&db_path).await.expect("open db");
+        let conn = db.conn();
+        let author = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        let created = issue_db::create(
+            conn,
+            Some("My Issue"),
+            "original description",
+            author.author_id,
+            None,
+        )
+        .await
+        .expect("create issue");
+        db.checkpoint().await.expect("checkpoint");
+        drop(db);
+
+        let mut app = App::new("Alice".to_string(), None);
+        app.issues = vec![created.clone()];
+        load_issue_thread(&db_path, &mut app)
+            .await
+            .expect("load thread");
+        assert_eq!(
+            app.thread.as_ref().expect("thread").description,
+            "original description"
+        );
+
+        let db = Database::open(&db_path).await.expect("open db");
+        issue_db::update_description(db.conn(), created.issue_id, "revised description")
+            .await
+            .expect("update description");
+        db.checkpoint().await.expect("checkpoint");
+        drop(db);
+
+        load_issue_thread(&db_path, &mut app)
+            .await
+            .expect("reload thread");
+        assert_eq!(
+            app.thread.as_ref().expect("thread").description,
+            "revised description",
+            "thread view must reflect the updated description without a full issues reload"
+        );
+    }
 }

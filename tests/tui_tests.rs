@@ -406,3 +406,70 @@ fn thread_input_box_word_wrap() {
     let output = render_to_string(20, 24, |f| view::thread::render(f, &mut app));
     insta::assert_snapshot!("thread_input_box_word_wrap", output);
 }
+
+#[test]
+fn thread_selection_on_description() {
+    let issue = make_issue(1, Some("Test issue"), "Description text", "Alice");
+    let comments = vec![IssueComment {
+        issue_comment_id: 1,
+        content: "A comment".to_string(),
+        author: "Bob".to_string(),
+        issue_id: 1,
+        created_at: "2025-01-01 10:00:00".to_string(),
+        updated_at: "2025-01-01 10:00:00".to_string(),
+    }];
+    let thread = Thread::from(&IssueWithComments { issue, comments });
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+    app.thread_selected = 0;
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    insta::assert_snapshot!("thread_selection_on_description", output);
+}
+
+#[test]
+fn thread_selection_on_comment() {
+    let issue = make_issue(1, Some("Test issue"), "Description text", "Alice");
+    let comments = vec![IssueComment {
+        issue_comment_id: 1,
+        content: "A comment".to_string(),
+        author: "Bob".to_string(),
+        issue_id: 1,
+        created_at: "2025-01-01 10:00:00".to_string(),
+        updated_at: "2025-01-01 10:00:00".to_string(),
+    }];
+    let thread = Thread::from(&IssueWithComments { issue, comments });
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+    app.thread_selected = 1;
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    insta::assert_snapshot!("thread_selection_on_comment", output);
+}
+
+#[test]
+fn thread_selection_not_shown_in_input_focus() {
+    let issue = make_issue(1, Some("Test issue"), "Description text", "Alice");
+    let comments = vec![IssueComment {
+        issue_comment_id: 1,
+        content: "A comment".to_string(),
+        author: "Bob".to_string(),
+        issue_id: 1,
+        created_at: "2025-01-01 10:00:00".to_string(),
+        updated_at: "2025-01-01 10:00:00".to_string(),
+    }];
+    let thread = Thread::from(&IssueWithComments { issue, comments });
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+    app.thread_selected = 0;
+    app.focus_input_box();
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    insta::assert_snapshot!("thread_selection_not_shown_in_input_focus", output);
+}

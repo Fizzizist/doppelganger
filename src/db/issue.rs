@@ -124,6 +124,24 @@ pub async fn update_for_sync(
     get_by_id(conn, issue_id).await
 }
 
+pub async fn update_description(
+    conn: &turso::Connection,
+    issue_id: i64,
+    description: &str,
+) -> Result<Issue> {
+    conn.execute(
+        "UPDATE issue SET description = ?1, updated_at = datetime('now') \
+         WHERE issue_id = ?2",
+        turso::params::Params::Positional(vec![
+            Value::Text(description.to_string()),
+            Value::Integer(issue_id),
+        ]),
+    )
+    .await?;
+
+    get_by_id(conn, issue_id).await
+}
+
 fn row_to_issue(row: &turso::Row) -> Result<Issue> {
     Ok(Issue {
         issue_id: extract_int(row, 0)?,
@@ -134,4 +152,41 @@ fn row_to_issue(row: &turso::Row) -> Result<Issue> {
         updated_at: extract_text(row, 5)?,
         remote_id: extract_optional_text(row, 6)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::db::{Database, author};
+
+    #[tokio::test]
+    async fn update_description_changes_only_description() {
+        let db = Database::open_in_memory().await.expect("open in-memory db");
+        let conn = db.conn();
+
+        let author = author::find_or_create(conn, "Alice", Some("a@b.com"))
+            .await
+            .expect("create author");
+        let original = super::create(
+            conn,
+            Some("test issue"),
+            "original desc",
+            author.author_id,
+            Some("remote-123"),
+        )
+        .await
+        .expect("create issue");
+
+        let updated = super::update_description(conn, original.issue_id, "new desc")
+            .await
+            .expect("update description");
+
+        assert_eq!(updated.description, "new desc");
+        assert_eq!(updated.name, original.name);
+        assert_eq!(updated.author, original.author);
+        assert_eq!(updated.remote_id, original.remote_id);
+        assert!(
+            updated.updated_at >= original.updated_at,
+            "updated_at must not go backwards"
+        );
+    }
 }

@@ -4,9 +4,9 @@ use tempfile::NamedTempFile;
 
 use crate::error::Result;
 
-pub fn spawn_editor(editor: &str) -> Result<String> {
+pub fn spawn_editor(editor: &str, initial: &str) -> Result<Option<String>> {
     let mut tmp = NamedTempFile::new()?;
-    writeln!(tmp)?;
+    write!(tmp, "{initial}")?;
     tmp.flush()?;
 
     let path = tmp.path().to_path_buf();
@@ -30,12 +30,10 @@ pub fn spawn_editor(editor: &str) -> Result<String> {
 
     let trimmed = content.trim().to_string();
     if trimmed.is_empty() {
-        return Err(crate::error::Error::Tui(
-            "content is empty; issue not created".to_string(),
-        ));
+        Ok(None)
+    } else {
+        Ok(Some(trimmed))
     }
-
-    Ok(trimmed)
 }
 
 #[cfg(test)]
@@ -44,22 +42,48 @@ mod tests {
 
     #[test]
     fn spawn_editor_with_cat_copies_content() {
-        let result = spawn_editor("cat");
+        let result = spawn_editor("cat", "");
         assert!(
-            result.is_err(),
-            "cat without initial content should fail (empty content)"
+            result.is_ok(),
+            "cat with empty initial should succeed but return None"
         );
+        match result {
+            Ok(None) => {} // empty content returns None
+            other => panic!("expected Ok(None), got {other:?}"),
+        }
     }
 
     #[test]
     fn spawn_editor_nonexistent_command_returns_error() {
-        let result = spawn_editor("nonexistent_editor_xyz_12345");
+        let result = spawn_editor("nonexistent_editor_xyz_12345", "");
         assert!(result.is_err());
         match result {
             Err(crate::error::Error::Tui(msg)) => {
                 assert!(msg.contains("failed to launch editor"), "got: {msg}");
             }
             other => panic!("expected Tui error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn spawn_editor_with_initial_content() {
+        let result = spawn_editor("true", "hello world");
+        assert!(result.is_ok());
+        match result {
+            Ok(Some(content)) => {
+                assert_eq!(content, "hello world");
+            }
+            other => panic!("expected Ok(Some(\"hello world\")), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn spawn_editor_empty_initial_with_true() {
+        let result = spawn_editor("true", "");
+        assert!(result.is_ok());
+        match result {
+            Ok(None) => {} // empty content returns None
+            other => panic!("expected Ok(None), got {other:?}"),
         }
     }
 }
