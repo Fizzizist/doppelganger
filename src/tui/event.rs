@@ -13,6 +13,7 @@ pub enum KeyResult {
     EditEntity,
     ToggleArchive,
     ToggleShowArchived,
+    ToggleHidden,
 }
 
 pub fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> KeyResult {
@@ -110,6 +111,12 @@ fn handle_thread_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> K
 
 fn handle_thread_focus_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> KeyResult {
     match (code, modifiers) {
+        (KeyCode::Char('h'), KeyModifiers::CONTROL) => {
+            if app.thread_selected == 0 {
+                return KeyResult::Continue;
+            }
+            KeyResult::ToggleHidden
+        }
         (KeyCode::Char('q'), _) | (KeyCode::Esc, _) | (KeyCode::Char('h'), _) => {
             app.back();
             KeyResult::Continue
@@ -141,6 +148,9 @@ fn handle_thread_focus_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers
             } else {
                 let idx = app.thread_selected - 1;
                 if idx < thread.comments.len() {
+                    if thread.comments[idx].hidden {
+                        return KeyResult::Continue;
+                    }
                     EditTarget::Comment(thread.comments[idx].comment_id)
                 } else {
                     return KeyResult::Continue;
@@ -236,12 +246,19 @@ pub async fn load_issue_thread(db_path: &str, app: &mut App) -> crate::error::Re
     let db = Database::open(db_path).await?;
     let conn = db.conn();
     let issue = issue::get_by_id(conn, issue_id).await?;
-    let comments = comment::list_issue_comments(conn, issue_id).await?;
+    let comments = comment::list_issue_comments(conn, issue_id, true).await?;
 
     let thread = Thread::from(&crate::db::models::IssueWithComments { issue, comments });
 
     let changed = match &app.thread {
-        Some(t) => t.updated_at != thread.updated_at || t.comments.len() != thread.comments.len(),
+        Some(t) => {
+            t.updated_at != thread.updated_at
+                || t.comments.len() != thread.comments.len()
+                || t.comments
+                    .iter()
+                    .zip(thread.comments.iter())
+                    .any(|(a, b)| a.hidden != b.hidden)
+        }
         None => true,
     };
 
@@ -261,14 +278,21 @@ pub async fn load_branch_thread(
     let db = Database::open(db_path).await?;
     let conn = db.conn();
     let br = crate::db::branch::get_by_name(conn, branch_name).await?;
-    let comments = crate::db::comment::list_branch_comments(conn, br.branch_id).await?;
+    let comments = crate::db::comment::list_branch_comments(conn, br.branch_id, true).await?;
     let thread = Thread::from(&crate::db::models::BranchWithComments {
         branch: br,
         comments,
     });
 
     let changed = match &app.thread {
-        Some(t) => t.updated_at != thread.updated_at || t.comments.len() != thread.comments.len(),
+        Some(t) => {
+            t.updated_at != thread.updated_at
+                || t.comments.len() != thread.comments.len()
+                || t.comments
+                    .iter()
+                    .zip(thread.comments.iter())
+                    .any(|(a, b)| a.hidden != b.hidden)
+        }
         None => true,
     };
 
@@ -394,5 +418,77 @@ mod tests {
         assert!(!app.ctrl_w_pending);
         assert!(matches!(app.focus, Focus::Thread));
         assert!(app.input_editor.is_none());
+    }
+
+    #[test]
+    fn ctrl_h_on_description_returns_continue() {
+        let mut app = App::default();
+        app.screen = Screen::Thread;
+        app.thread = Some(Thread {
+            issue_id: 1,
+            title: "T".to_string(),
+            author: "Alice".to_string(),
+            created_at: "2025-01-01".to_string(),
+            updated_at: "2025-01-01".to_string(),
+            description: "desc".to_string(),
+            comments: vec![],
+            archived: false,
+        });
+        app.thread_selected = 0; // description
+        let result = handle_key(&mut app, KeyCode::Char('h'), KeyModifiers::CONTROL);
+        assert!(matches!(result, KeyResult::Continue));
+    }
+
+    #[test]
+    fn ctrl_h_on_comment_returns_toggle_hidden() {
+        use crate::tui::model::ThreadComment;
+        let mut app = App::default();
+        app.screen = Screen::Thread;
+        app.thread = Some(Thread {
+            issue_id: 1,
+            title: "T".to_string(),
+            author: "Alice".to_string(),
+            created_at: "2025-01-01".to_string(),
+            updated_at: "2025-01-01".to_string(),
+            description: "desc".to_string(),
+            comments: vec![ThreadComment {
+                comment_id: 1,
+                author: "Alice".to_string(),
+                created_at: "2025-01-01".to_string(),
+                content: "comment".to_string(),
+                hidden: false,
+            }],
+            archived: false,
+        });
+        app.thread_selected = 1; // first comment
+        let result = handle_key(&mut app, KeyCode::Char('h'), KeyModifiers::CONTROL);
+        assert!(matches!(result, KeyResult::ToggleHidden));
+    }
+
+    #[test]
+    fn key_e_no_op_on_hidden_comment() {
+        use crate::tui::model::ThreadComment;
+        let mut app = App::default();
+        app.screen = Screen::Thread;
+        app.thread = Some(Thread {
+            issue_id: 1,
+            title: "T".to_string(),
+            author: "Alice".to_string(),
+            created_at: "2025-01-01".to_string(),
+            updated_at: "2025-01-01".to_string(),
+            description: "desc".to_string(),
+            comments: vec![ThreadComment {
+                comment_id: 1,
+                author: "Alice".to_string(),
+                created_at: "2025-01-01".to_string(),
+                content: "content".to_string(),
+                hidden: true,
+            }],
+            archived: false,
+        });
+        app.thread_selected = 1;
+        let result = handle_key(&mut app, KeyCode::Char('e'), KeyModifiers::NONE);
+        assert!(matches!(result, KeyResult::Continue));
+        assert!(app.pending_edit.is_none());
     }
 }

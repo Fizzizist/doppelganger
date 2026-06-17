@@ -100,6 +100,7 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
                         c.author.clone(),
                         c.created_at.clone(),
                         c.content.clone(),
+                        c.hidden,
                     )
                 })
                 .collect::<Vec<_>>(),
@@ -168,20 +169,30 @@ pub fn render(f: &mut ratatui::Frame, app: &mut App) {
     }
 
     // Items 1..n: comments
-    for (ci, (_comment_id, author, created_at, content)) in comments.iter().enumerate() {
+    for (ci, (_comment_id, author, created_at, content, hidden)) in comments.iter().enumerate() {
         let item_idx = ci + 1;
         item_for_line.push(item_idx); // blank separator line
         body_lines.push(Line::from(""));
-        item_for_line.push(item_idx); // header line
-        body_lines.push(Line::from(vec![
-            Span::styled(author.clone(), Style::default().fg(Color::Cyan)),
-            Span::raw(" "),
-            Span::styled(created_at.clone(), Style::default().fg(Color::DarkGray)),
-        ]));
-        let comment_text = the_other_tui_markdown::into_text_with_renderer(content, &renderer);
-        for line in comment_text.lines {
+        if *hidden {
             item_for_line.push(item_idx);
-            body_lines.push(line);
+            body_lines.push(Line::from(vec![Span::styled(
+                "  hidden",
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::ITALIC),
+            )]));
+        } else {
+            item_for_line.push(item_idx); // header line
+            body_lines.push(Line::from(vec![
+                Span::styled(author.clone(), Style::default().fg(Color::Cyan)),
+                Span::raw(" "),
+                Span::styled(created_at.clone(), Style::default().fg(Color::DarkGray)),
+            ]));
+            let comment_text = the_other_tui_markdown::into_text_with_renderer(content, &renderer);
+            for line in comment_text.lines {
+                item_for_line.push(item_idx);
+                body_lines.push(line);
+            }
         }
     }
 

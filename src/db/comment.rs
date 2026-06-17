@@ -3,18 +3,20 @@ use turso::Value;
 
 use super::{
     models::{BranchComment, IssueComment},
-    row::{extract_int, extract_text},
+    row::{extract_int, extract_optional_text, extract_text},
 };
 
 const SELECT_ISSUE_COMMENT: &str = r#"
 SELECT issue_comment.issue_comment_id, issue_comment.content, author.name,
-       issue_comment.issue_id, issue_comment.created_at, issue_comment.updated_at
+       issue_comment.issue_id, issue_comment.created_at, issue_comment.updated_at,
+       issue_comment.hidden_at
 FROM issue_comment JOIN author ON issue_comment.author_id = author.author_id
 "#;
 
 const SELECT_BRANCH_COMMENT: &str = r#"
 SELECT branch_comment.branch_comment_id, branch_comment.content, author.name,
-       branch_comment.branch_id, branch_comment.created_at, branch_comment.updated_at
+       branch_comment.branch_id, branch_comment.created_at, branch_comment.updated_at,
+       branch_comment.hidden_at
 FROM branch_comment JOIN author ON branch_comment.author_id = author.author_id
 "#;
 
@@ -62,11 +64,17 @@ pub async fn create_issue_comment(
 pub async fn list_issue_comments(
     conn: &turso::Connection,
     issue_id: i64,
+    show_hidden: bool,
 ) -> Result<Vec<IssueComment>> {
+    let hidden_filter = if show_hidden {
+        ""
+    } else {
+        " AND issue_comment.hidden_at IS NULL"
+    };
     let mut rows = conn
         .query(
             format!(
-                "{SELECT_ISSUE_COMMENT} WHERE issue_comment.issue_id = ?1 \
+                "{SELECT_ISSUE_COMMENT} WHERE issue_comment.issue_id = ?1{hidden_filter} \
                  ORDER BY issue_comment.created_at ASC"
             ),
             turso::params::Params::Positional(vec![Value::Integer(issue_id)]),
@@ -78,6 +86,24 @@ pub async fn list_issue_comments(
         comments.push(row_to_issue_comment(&row)?);
     }
     Ok(comments)
+}
+
+pub async fn set_issue_comment_hidden(
+    conn: &turso::Connection,
+    issue_comment_id: i64,
+    hidden: bool,
+) -> Result<()> {
+    let sql = if hidden {
+        "UPDATE issue_comment SET hidden_at = datetime('now') WHERE issue_comment_id = ?1"
+    } else {
+        "UPDATE issue_comment SET hidden_at = NULL WHERE issue_comment_id = ?1"
+    };
+    conn.execute(
+        sql,
+        turso::params::Params::Positional(vec![Value::Integer(issue_comment_id)]),
+    )
+    .await?;
+    Ok(())
 }
 
 pub async fn create_branch_comment(
@@ -115,11 +141,17 @@ pub async fn create_branch_comment(
 pub async fn list_branch_comments(
     conn: &turso::Connection,
     branch_id: i64,
+    show_hidden: bool,
 ) -> Result<Vec<BranchComment>> {
+    let hidden_filter = if show_hidden {
+        ""
+    } else {
+        " AND branch_comment.hidden_at IS NULL"
+    };
     let mut rows = conn
         .query(
             format!(
-                "{SELECT_BRANCH_COMMENT} WHERE branch_comment.branch_id = ?1 \
+                "{SELECT_BRANCH_COMMENT} WHERE branch_comment.branch_id = ?1{hidden_filter} \
                  ORDER BY branch_comment.created_at ASC"
             ),
             turso::params::Params::Positional(vec![Value::Integer(branch_id)]),
@@ -131,6 +163,24 @@ pub async fn list_branch_comments(
         comments.push(row_to_branch_comment(&row)?);
     }
     Ok(comments)
+}
+
+pub async fn set_branch_comment_hidden(
+    conn: &turso::Connection,
+    branch_comment_id: i64,
+    hidden: bool,
+) -> Result<()> {
+    let sql = if hidden {
+        "UPDATE branch_comment SET hidden_at = datetime('now') WHERE branch_comment_id = ?1"
+    } else {
+        "UPDATE branch_comment SET hidden_at = NULL WHERE branch_comment_id = ?1"
+    };
+    conn.execute(
+        sql,
+        turso::params::Params::Positional(vec![Value::Integer(branch_comment_id)]),
+    )
+    .await?;
+    Ok(())
 }
 
 pub async fn update_issue_comment(
@@ -201,6 +251,7 @@ fn row_to_issue_comment(row: &turso::Row) -> Result<IssueComment> {
         issue_id: extract_int(row, 3)?,
         created_at: extract_text(row, 4)?,
         updated_at: extract_text(row, 5)?,
+        hidden_at: extract_optional_text(row, 6)?,
     })
 }
 
@@ -212,6 +263,7 @@ fn row_to_branch_comment(row: &turso::Row) -> Result<BranchComment> {
         branch_id: extract_int(row, 3)?,
         created_at: extract_text(row, 4)?,
         updated_at: extract_text(row, 5)?,
+        hidden_at: extract_optional_text(row, 6)?,
     })
 }
 
@@ -280,5 +332,116 @@ mod tests {
             updated.updated_at >= original_updated_at,
             "updated_at must not go backwards"
         );
+    }
+
+    #[tokio::test]
+    async fn set_hidden_and_list_issue_comments_filter() {
+        let db = Database::open_in_memory().await.expect("open in-memory db");
+        let conn = db.conn();
+
+        let author = author::find_or_create(conn, "Alice", Some("a@b.com"))
+            .await
+            .expect("create author");
+        let iss = issue::create(conn, None, "desc", author.author_id, None)
+            .await
+            .expect("create issue");
+
+        let c1 = super::create_issue_comment(conn, iss.issue_id, "visible", author.author_id)
+            .await
+            .expect("create c1");
+        let c2 = super::create_issue_comment(conn, iss.issue_id, "to hide", author.author_id)
+            .await
+            .expect("create c2");
+
+        super::set_issue_comment_hidden(conn, c2.issue_comment_id, true)
+            .await
+            .expect("hide c2");
+
+        let visible = super::list_issue_comments(conn, iss.issue_id, false)
+            .await
+            .expect("list visible");
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].content, "visible");
+
+        let all = super::list_issue_comments(conn, iss.issue_id, true)
+            .await
+            .expect("list all");
+        assert_eq!(all.len(), 2);
+        let hidden_comment = all
+            .iter()
+            .find(|c| c.issue_comment_id == c2.issue_comment_id)
+            .expect("find c2");
+        assert!(hidden_comment.hidden_at.is_some());
+
+        super::set_issue_comment_hidden(conn, c2.issue_comment_id, false)
+            .await
+            .expect("unhide c2");
+
+        let after_unhide = super::list_issue_comments(conn, iss.issue_id, false)
+            .await
+            .expect("list after unhide");
+        assert_eq!(after_unhide.len(), 2, "both visible after unhide");
+        let c1_idx = after_unhide
+            .iter()
+            .position(|c| c.issue_comment_id == c1.issue_comment_id)
+            .expect("find c1");
+        assert!(after_unhide[c1_idx].hidden_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn set_hidden_and_list_branch_comments_filter() {
+        let db = Database::open_in_memory().await.expect("open in-memory db");
+        let conn = db.conn();
+
+        let author = author::find_or_create(conn, "Bob", Some("b@b.com"))
+            .await
+            .expect("create author");
+        let iss = issue::create(conn, None, "desc", author.author_id, None)
+            .await
+            .expect("create issue");
+        let br = branch::create(conn, "feat", "desc", author.author_id, iss.issue_id)
+            .await
+            .expect("create branch");
+
+        let c1 = super::create_branch_comment(conn, br.branch_id, "visible", author.author_id)
+            .await
+            .expect("create c1");
+        let c2 = super::create_branch_comment(conn, br.branch_id, "to hide", author.author_id)
+            .await
+            .expect("create c2");
+
+        super::set_branch_comment_hidden(conn, c2.branch_comment_id, true)
+            .await
+            .expect("hide c2");
+
+        let visible = super::list_branch_comments(conn, br.branch_id, false)
+            .await
+            .expect("list visible");
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].content, "visible");
+
+        let all = super::list_branch_comments(conn, br.branch_id, true)
+            .await
+            .expect("list all");
+        assert_eq!(all.len(), 2);
+        let hidden_comment = all
+            .iter()
+            .find(|c| c.branch_comment_id == c2.branch_comment_id)
+            .expect("find c2");
+        assert!(hidden_comment.hidden_at.is_some());
+
+        super::set_branch_comment_hidden(conn, c2.branch_comment_id, false)
+            .await
+            .expect("unhide c2");
+
+        let after_unhide = super::list_branch_comments(conn, br.branch_id, false)
+            .await
+            .expect("list after unhide");
+        assert_eq!(after_unhide.len(), 2, "both visible after unhide");
+        let c1_idx = after_unhide
+            .iter()
+            .position(|c| c.branch_comment_id == c1.branch_comment_id)
+            .expect("find c1");
+        assert!(after_unhide[c1_idx].hidden_at.is_none());
     }
 }

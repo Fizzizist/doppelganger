@@ -20,7 +20,10 @@ pub async fn handle(
         IssueCommands::Create { content, name } => {
             create(db, author_name, author_email, content, name).await
         }
-        IssueCommands::Read { issue_number } => read(db, issue_number).await,
+        IssueCommands::Read {
+            issue_number,
+            hidden,
+        } => read(db, issue_number, hidden).await,
         IssueCommands::Comment {
             issue_number,
             content,
@@ -50,10 +53,10 @@ async fn create(
     print_json(&created)
 }
 
-async fn read(db: &Database, issue_number: i64) -> Result<()> {
+async fn read(db: &Database, issue_number: i64, show_hidden: bool) -> Result<()> {
     let conn = db.conn();
     let iss = issue::get_by_id(conn, issue_number).await?;
-    let comments = comment::list_issue_comments(conn, iss.issue_id).await?;
+    let comments = comment::list_issue_comments(conn, iss.issue_id, show_hidden).await?;
     print_json(&IssueWithComments {
         issue: iss,
         comments,
@@ -118,7 +121,7 @@ async fn sync(
             .await?;
         }
 
-        let comments = comment::list_issue_comments(conn, updated.issue_id).await?;
+        let comments = comment::list_issue_comments(conn, updated.issue_id, false).await?;
         print_json(&IssueWithComments {
             issue: updated,
             comments,
@@ -145,7 +148,7 @@ async fn sync(
             .await?;
         }
 
-        let comments = comment::list_issue_comments(conn, created.issue_id).await?;
+        let comments = comment::list_issue_comments(conn, created.issue_id, false).await?;
         print_json(&IssueWithComments {
             issue: created,
             comments,

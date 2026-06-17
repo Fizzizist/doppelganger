@@ -86,6 +86,7 @@ fn thread_render_issue() {
             issue_id: 1,
             created_at: "2025-01-01 10:00:00".to_string(),
             updated_at: "2025-01-01 10:00:00".to_string(),
+            hidden_at: None,
         },
         IssueComment {
             issue_comment_id: 2,
@@ -94,6 +95,7 @@ fn thread_render_issue() {
             issue_id: 1,
             created_at: "2025-01-01 11:00:00".to_string(),
             updated_at: "2025-01-01 11:00:00".to_string(),
+            hidden_at: None,
         },
     ];
     let thread = Thread::from(&IssueWithComments { issue, comments });
@@ -125,6 +127,7 @@ fn thread_render_branch() {
         branch_id: 1,
         created_at: "2025-01-01 10:00:00".to_string(),
         updated_at: "2025-01-01 10:00:00".to_string(),
+        hidden_at: None,
     }];
     let thread = Thread::from(&BranchWithComments { branch, comments });
 
@@ -418,6 +421,7 @@ fn thread_selection_on_description() {
         issue_id: 1,
         created_at: "2025-01-01 10:00:00".to_string(),
         updated_at: "2025-01-01 10:00:00".to_string(),
+        hidden_at: None,
     }];
     let thread = Thread::from(&IssueWithComments { issue, comments });
 
@@ -440,6 +444,7 @@ fn thread_selection_on_comment() {
         issue_id: 1,
         created_at: "2025-01-01 10:00:00".to_string(),
         updated_at: "2025-01-01 10:00:00".to_string(),
+        hidden_at: None,
     }];
     let thread = Thread::from(&IssueWithComments { issue, comments });
 
@@ -462,6 +467,7 @@ fn thread_selection_not_shown_in_input_focus() {
         issue_id: 1,
         created_at: "2025-01-01 10:00:00".to_string(),
         updated_at: "2025-01-01 10:00:00".to_string(),
+        hidden_at: None,
     }];
     let thread = Thread::from(&IssueWithComments { issue, comments });
 
@@ -538,4 +544,42 @@ fn issue_list_show_archived_view() {
         "A-view must show [archived] marker, got:\n{output}"
     );
     insta::assert_snapshot!("issue_list_show_archived_view", output);
+}
+
+#[test]
+fn thread_render_with_hidden_comment() {
+    use doppelganger::tui::model::ThreadComment;
+
+    let issue = make_issue(1, Some("Bug"), "Some description", "Alice");
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    let thread = Thread {
+        issue_id: 1,
+        title: "Bug".to_string(),
+        author: "Alice".to_string(),
+        created_at: "2025-01-01 00:00:00".to_string(),
+        updated_at: "2025-01-02 12:00:00".to_string(),
+        description: "Some description".to_string(),
+        comments: vec![
+            ThreadComment {
+                comment_id: 1,
+                author: "Bob".to_string(),
+                created_at: "2025-01-02 10:00:00".to_string(),
+                content: "visible comment".to_string(),
+                hidden: false,
+            },
+            ThreadComment {
+                comment_id: 2,
+                author: "Charlie".to_string(),
+                created_at: "2025-01-02 11:00:00".to_string(),
+                content: "this is hidden".to_string(),
+                hidden: true,
+            },
+        ],
+        archived: false,
+    };
+    app.thread = Some(thread);
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    insta::assert_snapshot!("thread_with_hidden_comment", output);
 }

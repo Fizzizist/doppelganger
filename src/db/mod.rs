@@ -68,6 +68,7 @@ impl Database {
         self.conn.execute(schema::BRANCH_COMMENT_TABLE, ()).await?;
         self.migrate_remote_id().await?;
         self.migrate_archived_at().await?;
+        self.migrate_hidden_at().await?;
         Ok(())
     }
 
@@ -93,6 +94,21 @@ impl Database {
             Err(e) if e.to_string().contains("duplicate column name") => Ok(()),
             Err(e) => Err(classify_db_error(e)),
         }
+    }
+
+    async fn migrate_hidden_at(&self) -> Result<()> {
+        let stmts = [
+            schema::ALTER_TABLE_ISSUE_COMMENT_HIDDEN_AT,
+            schema::ALTER_TABLE_BRANCH_COMMENT_HIDDEN_AT,
+        ];
+        for stmt in stmts {
+            match self.conn.execute(stmt, ()).await {
+                Ok(_) => {}
+                Err(e) if e.to_string().contains("duplicate column name") => {}
+                Err(e) => return Err(classify_db_error(e)),
+            }
+        }
+        Ok(())
     }
 
     pub async fn checkpoint(&self) -> Result<()> {
