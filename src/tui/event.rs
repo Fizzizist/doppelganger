@@ -111,7 +111,7 @@ fn handle_thread_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> K
 
 fn handle_thread_focus_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> KeyResult {
     match (code, modifiers) {
-        (KeyCode::Char('h'), KeyModifiers::CONTROL) => {
+        (KeyCode::Char('H'), _) => {
             if app.thread_selected == 0 {
                 return KeyResult::Continue;
             }
@@ -421,7 +421,7 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_h_on_description_returns_continue() {
+    fn shift_h_on_description_returns_continue() {
         let mut app = App::default();
         app.screen = Screen::Thread;
         app.thread = Some(Thread {
@@ -435,12 +435,12 @@ mod tests {
             archived: false,
         });
         app.thread_selected = 0; // description
-        let result = handle_key(&mut app, KeyCode::Char('h'), KeyModifiers::CONTROL);
+        let result = handle_key(&mut app, KeyCode::Char('H'), KeyModifiers::SHIFT);
         assert!(matches!(result, KeyResult::Continue));
     }
 
     #[test]
-    fn ctrl_h_on_comment_returns_toggle_hidden() {
+    fn shift_h_on_comment_returns_toggle_hidden() {
         use crate::tui::model::ThreadComment;
         let mut app = App::default();
         app.screen = Screen::Thread;
@@ -461,7 +461,7 @@ mod tests {
             archived: false,
         });
         app.thread_selected = 1; // first comment
-        let result = handle_key(&mut app, KeyCode::Char('h'), KeyModifiers::CONTROL);
+        let result = handle_key(&mut app, KeyCode::Char('H'), KeyModifiers::SHIFT);
         assert!(matches!(result, KeyResult::ToggleHidden));
     }
 
