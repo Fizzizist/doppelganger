@@ -399,6 +399,8 @@ async fn toggle_show_archived(db_path: &str, app: &mut App) -> Result<()> {
 }
 
 async fn toggle_hidden(db_path: &str, app: &mut App) -> Result<()> {
+    let max = app.thread.as_ref().map(|t| t.comments.len()).unwrap_or(0);
+    app.thread_selected = app.thread_selected.min(max);
     let idx = app.thread_selected;
     if idx == 0 {
         return Ok(());
@@ -420,7 +422,7 @@ async fn toggle_hidden(db_path: &str, app: &mut App) -> Result<()> {
             let comment_id = comment.comment_id;
             db::comment::set_issue_comment_hidden(conn, comment_id, new_hidden).await?;
         }
-        TuiMode::Branch { branch_name } => {
+        TuiMode::Branch { branch_name: _ } => {
             let Some(thread) = &app.thread else {
                 return Ok(());
             };
@@ -430,7 +432,6 @@ async fn toggle_hidden(db_path: &str, app: &mut App) -> Result<()> {
             let new_hidden = !comment.hidden;
             let comment_id = comment.comment_id;
             db::comment::set_branch_comment_hidden(conn, comment_id, new_hidden).await?;
-            let _ = branch_name;
         }
     }
 
@@ -446,6 +447,10 @@ async fn toggle_hidden(db_path: &str, app: &mut App) -> Result<()> {
     } else {
         event::load_issue_thread(db_path, app).await?;
     }
+
+    let max = app.thread.as_ref().map(|t| t.comments.len()).unwrap_or(0);
+    app.thread_selected = app.thread_selected.min(max);
+
     Ok(())
 }
 
@@ -1356,5 +1361,120 @@ mod hide_tests {
         app.thread_selected = 0; // description
         toggle_hidden(&db_path, &mut app).await.expect("noop");
         // No panic, nothing changed
+    }
+
+    #[tokio::test]
+    async fn toggle_hidden_unhides_branch_comment() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let db_path = tmp
+            .path()
+            .join("unhide_branch.db")
+            .to_str()
+            .expect("path")
+            .to_string();
+
+        let db = Database::open(&db_path).await.expect("open db");
+        let conn = db.conn();
+        let auth = author::find_or_create(conn, "Bob", None)
+            .await
+            .expect("author");
+        let iss = issue::create(conn, None, "desc", auth.author_id, None)
+            .await
+            .expect("issue");
+        let br = branch::create(conn, "feat", "desc", auth.author_id, iss.issue_id)
+            .await
+            .expect("branch");
+        let c =
+            comment::create_branch_comment(conn, br.branch_id, "branch comment", auth.author_id)
+                .await
+                .expect("comment");
+        comment::set_branch_comment_hidden(conn, c.branch_comment_id, true)
+            .await
+            .expect("pre-hide");
+        db.checkpoint().await.expect("checkpoint");
+        drop(db);
+
+        let mut app = App::new("Bob".to_string(), None);
+        app.screen = Screen::Thread;
+        app.tui_mode = TuiMode::Branch {
+            branch_name: br.name.clone(),
+        };
+        event::load_branch_thread(&db_path, &br.name, &mut app)
+            .await
+            .expect("load thread");
+
+        assert!(
+            app.thread.as_ref().expect("thread").comments[0].hidden,
+            "must start hidden"
+        );
+
+        app.thread_selected = 1;
+        toggle_hidden(&db_path, &mut app)
+            .await
+            .expect("toggle hidden");
+
+        assert!(!app.thread.as_ref().expect("thread after unhide").comments[0].hidden);
+
+        let db = Database::open(&db_path).await.expect("open verify");
+        let all = comment::list_branch_comments(db.conn(), br.branch_id, true)
+            .await
+            .expect("list");
+        assert!(
+            all.iter()
+                .find(|x| x.branch_comment_id == c.branch_comment_id)
+                .expect("find")
+                .hidden_at
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn toggle_hidden_clamps_thread_selected() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let db_path = tmp
+            .path()
+            .join("clamp_hidden.db")
+            .to_str()
+            .expect("path")
+            .to_string();
+
+        let db = Database::open(&db_path).await.expect("open db");
+        let conn = db.conn();
+        let auth = author::find_or_create(conn, "Alice", None)
+            .await
+            .expect("author");
+        let iss = issue::create(conn, None, "desc", auth.author_id, None)
+            .await
+            .expect("issue");
+        comment::create_issue_comment(conn, iss.issue_id, "c1", auth.author_id)
+            .await
+            .expect("c1");
+        db.checkpoint().await.expect("checkpoint");
+        drop(db);
+
+        let mut app = App::new("Alice".to_string(), None);
+        app.screen = Screen::Thread;
+        app.tui_mode = TuiMode::Issue;
+        app.issues = vec![{
+            let db = Database::open(&db_path).await.expect("open");
+            issue::get_by_id(db.conn(), iss.issue_id)
+                .await
+                .expect("get")
+        }];
+        app.selected_issue = 0;
+        event::load_issue_thread(&db_path, &mut app)
+            .await
+            .expect("load");
+
+        app.thread_selected = 99; // out of bounds
+        toggle_hidden(&db_path, &mut app).await.expect("toggle");
+
+        let max = app.thread.as_ref().expect("thread").comments.len();
+        assert!(
+            app.thread_selected <= max,
+            "thread_selected={} must be <= comments.len()={}",
+            app.thread_selected,
+            max
+        );
     }
 }

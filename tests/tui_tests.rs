@@ -583,3 +583,83 @@ fn thread_render_with_hidden_comment() {
     let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
     insta::assert_snapshot!("thread_with_hidden_comment", output);
 }
+
+#[test]
+fn thread_render_branch_with_hidden_comment() {
+    use doppelganger::db::models::{Branch, BranchComment, BranchWithComments};
+
+    let branch = Branch {
+        branch_id: 1,
+        name: "feature-hide".to_string(),
+        description: "Branch with a hidden comment".to_string(),
+        author: "Bob".to_string(),
+        issue_id: 1,
+        created_at: "2025-01-01 00:00:00".to_string(),
+        updated_at: "2025-01-02 12:00:00".to_string(),
+    };
+    let comments = vec![
+        BranchComment {
+            branch_comment_id: 1,
+            content: "visible branch comment".to_string(),
+            author: "Bob".to_string(),
+            branch_id: 1,
+            created_at: "2025-01-02 10:00:00".to_string(),
+            updated_at: "2025-01-02 10:00:00".to_string(),
+            hidden_at: None,
+        },
+        BranchComment {
+            branch_comment_id: 2,
+            content: "hidden branch comment".to_string(),
+            author: "Alice".to_string(),
+            branch_id: 1,
+            created_at: "2025-01-02 11:00:00".to_string(),
+            updated_at: "2025-01-02 11:00:00".to_string(),
+            hidden_at: Some("2025-01-02 12:00:00".to_string()),
+        },
+    ];
+    let thread = Thread::from(&BranchWithComments { branch, comments });
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    insta::assert_snapshot!("thread_branch_with_hidden_comment", output);
+}
+
+#[test]
+fn thread_render_selection_on_hidden_comment() {
+    use doppelganger::tui::model::ThreadComment;
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    let thread = Thread {
+        issue_id: 1,
+        title: "Test".to_string(),
+        author: "Alice".to_string(),
+        created_at: "2025-01-01 00:00:00".to_string(),
+        updated_at: "2025-01-02 12:00:00".to_string(),
+        description: "Description".to_string(),
+        comments: vec![
+            ThreadComment {
+                comment_id: 1,
+                author: "Bob".to_string(),
+                created_at: "2025-01-02 10:00:00".to_string(),
+                content: "visible".to_string(),
+                hidden: false,
+            },
+            ThreadComment {
+                comment_id: 2,
+                author: "Charlie".to_string(),
+                created_at: "2025-01-02 11:00:00".to_string(),
+                content: "hidden content".to_string(),
+                hidden: true,
+            },
+        ],
+        archived: false,
+    };
+    app.thread = Some(thread);
+    app.thread_selected = 2; // select the hidden comment
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    insta::assert_snapshot!("thread_selection_on_hidden_comment", output);
+}
