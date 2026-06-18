@@ -36,6 +36,7 @@ pub struct IssueComment {
     pub issue_id: i64,
     pub created_at: String,
     pub updated_at: String,
+    pub hidden_at: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -46,6 +47,7 @@ pub struct BranchComment {
     pub branch_id: i64,
     pub created_at: String,
     pub updated_at: String,
+    pub hidden_at: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]

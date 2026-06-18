@@ -202,7 +202,7 @@ async fn issue_comments_create_and_list() {
         .await
         .expect("create second comment");
 
-    let comments = comment::list_issue_comments(conn, iss.issue_id)
+    let comments = comment::list_issue_comments(conn, iss.issue_id, true)
         .await
         .expect("list comments");
 
@@ -233,7 +233,7 @@ async fn branch_comments_create_and_list() {
         .await
         .expect("create comment 2");
 
-    let comments = comment::list_branch_comments(conn, br.branch_id)
+    let comments = comment::list_branch_comments(conn, br.branch_id, true)
         .await
         .expect("list comments");
 

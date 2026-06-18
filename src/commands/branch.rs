@@ -31,7 +31,7 @@ pub async fn handle(
             )
             .await
         }
-        BranchCommands::Read => read(db, repo).await,
+        BranchCommands::Read { hidden } => read(db, repo, hidden).await,
         BranchCommands::Comment { content } => {
             comment_cmd(db, repo, author_name, author_email, content).await
         }
@@ -87,11 +87,11 @@ async fn create(
     print_json(&created)
 }
 
-async fn read(db: &Database, repo: &git2::Repository) -> Result<()> {
+async fn read(db: &Database, repo: &git2::Repository, show_hidden: bool) -> Result<()> {
     let branch_name = current_branch(repo)?;
     let conn = db.conn();
     let br = branch::get_by_name(conn, &branch_name).await?;
-    let comments = comment::list_branch_comments(conn, br.branch_id).await?;
+    let comments = comment::list_branch_comments(conn, br.branch_id, show_hidden).await?;
     print_json(&BranchWithComments {
         branch: br,
         comments,

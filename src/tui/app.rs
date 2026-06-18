@@ -322,12 +322,14 @@ mod tests {
                     author: "Bob".to_string(),
                     created_at: "2025-01-01".to_string(),
                     content: "comment".to_string(),
+                    hidden: false,
                 },
                 ThreadComment {
                     comment_id: 2,
                     author: "Charlie".to_string(),
                     created_at: "2025-01-01".to_string(),
                     content: "comment2".to_string(),
+                    hidden: false,
                 },
             ],
             archived: false,
@@ -356,6 +358,7 @@ mod tests {
                 author: "Bob".to_string(),
                 created_at: "2025-01-01".to_string(),
                 content: "comment".to_string(),
+                hidden: false,
             }],
             archived: false,
         });
@@ -383,6 +386,7 @@ mod tests {
                 author: "Bob".to_string(),
                 created_at: "2025-01-01".to_string(),
                 content: "comment".to_string(),
+                hidden: false,
             }],
             archived: false,
         });
@@ -445,6 +449,7 @@ mod tests {
                 author: "Bob".to_string(),
                 created_at: "2025-01-01".to_string(),
                 content: "comment".to_string(),
+                hidden: false,
             }],
             archived: false,
         });

@@ -57,6 +57,8 @@ pub enum IssueCommands {
     },
     Read {
         issue_number: i64,
+        #[arg(long)]
+        hidden: bool,
     },
     Comment {
         issue_number: i64,
@@ -78,7 +80,10 @@ pub enum BranchCommands {
         #[arg(long)]
         overwrite: bool,
     },
-    Read,
+    Read {
+        #[arg(long)]
+        hidden: bool,
+    },
     Comment {
         content: Option<String>,
     },

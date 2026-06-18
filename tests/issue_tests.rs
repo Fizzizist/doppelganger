@@ -423,3 +423,115 @@ async fn first_run_writes_sample_and_exits_zero() {
         .join("config.toml");
     assert!(config_file.exists(), "sample config.toml should be written");
 }
+
+#[tokio::test]
+async fn issue_read_hides_hidden_comments_by_default() {
+    let repo = TestRepo::new();
+
+    // Create issue
+    let output = repo
+        .dg_command()
+        .arg("issue")
+        .arg("create")
+        .arg("test issue")
+        .output()
+        .expect("create issue failed");
+    assert!(
+        output.status.success(),
+        "create issue should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = std::str::from_utf8(&output.stdout).expect("valid utf8");
+    let json: serde_json::Value = serde_json::from_str(stdout).expect("valid JSON");
+    let issue_id: i64 = json
+        .get("issue_id")
+        .and_then(|v| v.as_i64())
+        .expect("issue_id");
+
+    // Add two comments
+    repo.dg_command()
+        .arg("issue")
+        .arg("comment")
+        .arg(issue_id.to_string())
+        .arg("visible comment")
+        .output()
+        .expect("comment failed");
+
+    repo.dg_command()
+        .arg("issue")
+        .arg("comment")
+        .arg(issue_id.to_string())
+        .arg("to hide")
+        .output()
+        .expect("comment 2 failed");
+
+    // Hide the second comment directly via DB
+    {
+        use doppelganger::db::{Database, comment};
+        let db_path = repo
+            .path
+            .join(".doppelganger.db")
+            .to_str()
+            .expect("db path")
+            .to_string();
+        let db = Database::open(&db_path).await.expect("open db");
+        let comments = comment::list_issue_comments(db.conn(), issue_id, true)
+            .await
+            .expect("list comments");
+        let to_hide = comments
+            .iter()
+            .find(|c| c.content == "to hide")
+            .expect("find comment to hide");
+        comment::set_issue_comment_hidden(db.conn(), to_hide.issue_comment_id, true)
+            .await
+            .expect("hide comment");
+        db.checkpoint().await.expect("checkpoint");
+    }
+
+    // Default read: hidden comment excluded
+    let output = repo
+        .dg_command()
+        .arg("issue")
+        .arg("read")
+        .arg(issue_id.to_string())
+        .output()
+        .expect("read failed");
+    assert!(
+        output.status.success(),
+        "read should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = std::str::from_utf8(&output.stdout).expect("valid utf8");
+    let json: serde_json::Value = serde_json::from_str(stdout).expect("valid JSON");
+    let comments = json
+        .get("comments")
+        .and_then(|v| v.as_array())
+        .expect("comments");
+    assert_eq!(comments.len(), 1, "should have only visible comment");
+    assert_eq!(
+        comments[0].get("content").and_then(|v| v.as_str()),
+        Some("visible comment")
+    );
+
+    // --hidden read: both included
+    let output = repo
+        .dg_command()
+        .arg("issue")
+        .arg("read")
+        .arg(issue_id.to_string())
+        .arg("--hidden")
+        .output()
+        .expect("read --hidden failed");
+    assert!(
+        output.status.success(),
+        "read --hidden should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = std::str::from_utf8(&output.stdout).expect("valid utf8");
+    let json: serde_json::Value = serde_json::from_str(stdout).expect("valid JSON");
+    let comments = json
+        .get("comments")
+        .and_then(|v| v.as_array())
+        .expect("comments");
+    assert_eq!(comments.len(), 2, "should have both comments with --hidden");
+}

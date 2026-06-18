@@ -18,6 +18,7 @@ pub struct ThreadComment {
     pub author: String,
     pub created_at: String,
     pub content: String,
+    pub hidden: bool,
 }
 
 impl From<&Issue> for Thread {
@@ -78,6 +79,7 @@ impl From<&IssueComment> for ThreadComment {
             author: comment.author.clone(),
             created_at: comment.created_at.clone(),
             content: comment.content.clone(),
+            hidden: comment.hidden_at.is_some(),
         }
     }
 }
@@ -89,6 +91,7 @@ impl From<&BranchComment> for ThreadComment {
             author: comment.author.clone(),
             created_at: comment.created_at.clone(),
             content: comment.content.clone(),
+            hidden: comment.hidden_at.is_some(),
         }
     }
 }
@@ -174,6 +177,7 @@ mod tests {
                 issue_id: 1,
                 created_at: "2025-01-01 00:00:00".to_string(),
                 updated_at: "2025-01-01 00:00:00".to_string(),
+                hidden_at: None,
             },
             IssueComment {
                 issue_comment_id: 2,
@@ -182,6 +186,7 @@ mod tests {
                 issue_id: 1,
                 created_at: "2025-01-01 00:00:00".to_string(),
                 updated_at: "2025-01-01 00:00:00".to_string(),
+                hidden_at: None,
             },
         ];
         let iwc = IssueWithComments { issue, comments };
@@ -214,6 +219,7 @@ mod tests {
                 branch_id: 1,
                 created_at: "2025-01-01 00:00:00".to_string(),
                 updated_at: "2025-01-01 00:00:00".to_string(),
+                hidden_at: None,
             },
             BranchComment {
                 branch_comment_id: 2,
@@ -222,6 +228,7 @@ mod tests {
                 branch_id: 1,
                 created_at: "2025-01-01 00:00:00".to_string(),
                 updated_at: "2025-01-01 00:00:00".to_string(),
+                hidden_at: None,
             },
         ];
         let bwc = BranchWithComments { branch, comments };
@@ -243,12 +250,14 @@ mod tests {
             issue_id: 1,
             created_at: "2025-01-01".to_string(),
             updated_at: "2025-01-01".to_string(),
+            hidden_at: None,
         };
         let tc = ThreadComment::from(&ic);
         assert_eq!(tc.comment_id, 1);
         assert_eq!(tc.author, "Alice");
         assert_eq!(tc.content, "Hello");
         assert_eq!(tc.created_at, "2025-01-01");
+        assert!(!tc.hidden);
     }
 
     #[test]
@@ -260,10 +269,12 @@ mod tests {
             branch_id: 1,
             created_at: "2025-01-01".to_string(),
             updated_at: "2025-01-01".to_string(),
+            hidden_at: None,
         };
         let tc = ThreadComment::from(&bc);
         assert_eq!(tc.comment_id, 1);
         assert_eq!(tc.author, "Bob");
         assert_eq!(tc.content, "World");
+        assert!(!tc.hidden);
     }
 }
