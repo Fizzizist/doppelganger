@@ -407,30 +407,23 @@ async fn toggle_hidden(db_path: &str, app: &mut App) -> Result<()> {
     }
     let comment_idx = idx - 1;
 
+    let Some(thread) = &app.thread else {
+        return Ok(());
+    };
+    let Some(comment) = thread.comments.get(comment_idx) else {
+        return Ok(());
+    };
+    let new_hidden = !comment.hidden;
+    let comment_id = comment.comment_id;
+
     let db = db::Database::open(db_path).await?;
     let conn = db.conn();
 
     match &app.tui_mode {
         TuiMode::Issue => {
-            let Some(thread) = &app.thread else {
-                return Ok(());
-            };
-            let Some(comment) = thread.comments.get(comment_idx) else {
-                return Ok(());
-            };
-            let new_hidden = !comment.hidden;
-            let comment_id = comment.comment_id;
             db::comment::set_issue_comment_hidden(conn, comment_id, new_hidden).await?;
         }
         TuiMode::Branch { branch_name: _ } => {
-            let Some(thread) = &app.thread else {
-                return Ok(());
-            };
-            let Some(comment) = thread.comments.get(comment_idx) else {
-                return Ok(());
-            };
-            let new_hidden = !comment.hidden;
-            let comment_id = comment.comment_id;
             db::comment::set_branch_comment_hidden(conn, comment_id, new_hidden).await?;
         }
     }
