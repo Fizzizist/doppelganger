@@ -431,14 +431,13 @@ async fn toggle_hidden(db_path: &str, app: &mut App) -> Result<()> {
     db.checkpoint().await?;
     drop(db);
 
-    let branch_name = match &app.tui_mode {
-        TuiMode::Branch { branch_name } => Some(branch_name.clone()),
-        TuiMode::Issue => None,
-    };
-    if let Some(name) = branch_name {
-        event::load_branch_thread(db_path, &name, app).await?;
-    } else {
-        event::load_issue_thread(db_path, app).await?;
+    match &app.tui_mode {
+        TuiMode::Branch { branch_name } => {
+            event::load_branch_thread(db_path, &branch_name.clone(), app).await?;
+        }
+        TuiMode::Issue => {
+            event::load_issue_thread(db_path, app).await?;
+        }
     }
 
     let max = app.thread.as_ref().map(|t| t.comments.len()).unwrap_or(0);
