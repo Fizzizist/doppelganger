@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS issue (
 pub const BRANCH_TABLE: &str = r#"
 CREATE TABLE IF NOT EXISTS branch (
     branch_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
     description TEXT NOT NULL,
     author_id INTEGER NOT NULL REFERENCES author(author_id),
     issue_id INTEGER NOT NULL REFERENCES issue(issue_id),
@@ -52,3 +52,7 @@ pub const ALTER_TABLE_ISSUE_COMMENT_HIDDEN_AT: &str =
     "ALTER TABLE issue_comment ADD COLUMN hidden_at TEXT";
 pub const ALTER_TABLE_BRANCH_COMMENT_HIDDEN_AT: &str =
     "ALTER TABLE branch_comment ADD COLUMN hidden_at TEXT";
+
+pub const ALTER_TABLE_BRANCH_ARCHIVED_AT: &str = "ALTER TABLE branch ADD COLUMN archived_at TEXT";
+
+pub const CREATE_INDEX_BRANCH_ACTIVE_NAME: &str = "CREATE UNIQUE INDEX IF NOT EXISTS idx_branch_active_name ON branch(name) WHERE archived_at IS NULL";

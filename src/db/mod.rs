@@ -69,6 +69,8 @@ impl Database {
         self.migrate_remote_id().await?;
         self.migrate_archived_at().await?;
         self.migrate_hidden_at().await?;
+        self.migrate_branch_archived_at().await?;
+        self.migrate_branch_active_index().await?;
         Ok(())
     }
 
@@ -109,6 +111,30 @@ impl Database {
             }
         }
         Ok(())
+    }
+
+    async fn migrate_branch_archived_at(&self) -> Result<()> {
+        match self
+            .conn
+            .execute(schema::ALTER_TABLE_BRANCH_ARCHIVED_AT, ())
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) if e.to_string().contains("duplicate column name") => Ok(()),
+            Err(e) => Err(classify_db_error(e)),
+        }
+    }
+
+    async fn migrate_branch_active_index(&self) -> Result<()> {
+        match self
+            .conn
+            .execute(schema::CREATE_INDEX_BRANCH_ACTIVE_NAME, ())
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) if e.to_string().contains("already exists") => Ok(()),
+            Err(e) => Err(classify_db_error(e)),
+        }
     }
 
     pub async fn checkpoint(&self) -> Result<()> {

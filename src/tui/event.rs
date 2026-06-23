@@ -277,7 +277,7 @@ pub async fn load_branch_thread(
 ) -> crate::error::Result<bool> {
     let db = Database::open(db_path).await?;
     let conn = db.conn();
-    let br = crate::db::branch::get_by_name(conn, branch_name).await?;
+    let br = crate::db::branch::get_active_by_name(conn, branch_name).await?;
     let comments = crate::db::comment::list_branch_comments(conn, br.branch_id, true).await?;
     let thread = Thread::from(&crate::db::models::BranchWithComments {
         branch: br,

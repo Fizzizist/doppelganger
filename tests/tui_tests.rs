@@ -119,6 +119,7 @@ fn thread_render_branch() {
         issue_id: 1,
         created_at: "2025-01-01 00:00:00".to_string(),
         updated_at: "2025-01-02 12:00:00".to_string(),
+        archived_at: None,
     };
     let comments = vec![BranchComment {
         branch_comment_id: 1,
@@ -596,6 +597,7 @@ fn thread_render_branch_with_hidden_comment() {
         issue_id: 1,
         created_at: "2025-01-01 00:00:00".to_string(),
         updated_at: "2025-01-02 12:00:00".to_string(),
+        archived_at: None,
     };
     let comments = vec![
         BranchComment {

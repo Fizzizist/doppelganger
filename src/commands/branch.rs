@@ -35,6 +35,7 @@ pub async fn handle(
         BranchCommands::Comment { content } => {
             comment_cmd(db, repo, author_name, author_email, content).await
         }
+        BranchCommands::Archive => archive(db, repo).await,
         BranchCommands::Tui => Err(crate::error::Error::Validation(
             "branch tui is handled before DB open".to_string(),
         )),
@@ -58,7 +59,7 @@ async fn create(
     let author = author::find_or_create(conn, author_name, author_email).await?;
 
     let created = if overwrite {
-        match branch::get_by_name(conn, &branch_name).await {
+        match branch::get_active_by_name(conn, &branch_name).await {
             Ok(_existing) => {
                 branch::update_description(conn, &branch_name, &description_text).await?
             }
@@ -87,10 +88,19 @@ async fn create(
     print_json(&created)
 }
 
+async fn archive(db: &Database, repo: &git2::Repository) -> Result<()> {
+    let branch_name = current_branch(repo)?;
+    let conn = db.conn();
+    let br = branch::get_active_by_name(conn, &branch_name).await?;
+    branch::set_archived(conn, br.branch_id, true).await?;
+    let archived = branch::get_by_id(conn, br.branch_id).await?;
+    print_json(&archived)
+}
+
 async fn read(db: &Database, repo: &git2::Repository, show_hidden: bool) -> Result<()> {
     let branch_name = current_branch(repo)?;
     let conn = db.conn();
-    let br = branch::get_by_name(conn, &branch_name).await?;
+    let br = branch::get_active_by_name(conn, &branch_name).await?;
     let comments = comment::list_branch_comments(conn, br.branch_id, show_hidden).await?;
     print_json(&BranchWithComments {
         branch: br,
@@ -108,7 +118,7 @@ async fn comment_cmd(
     let branch_name = current_branch(repo)?;
     let text = resolve_content(content)?;
     let conn = db.conn();
-    let br = branch::get_by_name(conn, &branch_name).await?;
+    let br = branch::get_active_by_name(conn, &branch_name).await?;
     let author = author::find_or_create(conn, author_name, author_email).await?;
     let created =
         comment::create_branch_comment(conn, br.branch_id, &text, author.author_id).await?;

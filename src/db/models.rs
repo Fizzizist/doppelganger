@@ -26,6 +26,7 @@ pub struct Branch {
     pub issue_id: i64,
     pub created_at: String,
     pub updated_at: String,
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]

@@ -1,6 +1,7 @@
 mod common;
 
 use doppelganger::db::{Database, author, branch, comment, issue};
+use turso::Value;
 
 #[tokio::test]
 async fn migrate_is_idempotent() {
@@ -506,4 +507,49 @@ async fn migration_adds_remote_id_to_existing_db() {
 async fn migration_remote_id_is_idempotent() {
     let db = Database::open_in_memory().await.expect("open in-memory db");
     db.migrate().await.expect("second migrate should succeed");
+}
+
+#[tokio::test]
+async fn migrate_adds_branch_archived_at() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let mut rows = conn
+        .query("PRAGMA table_info(branch)", ())
+        .await
+        .expect("pragma query");
+    let mut found = false;
+    while let Some(row) = rows.next().await.expect("next row") {
+        let name = row.get_value(1).expect("column name");
+        if let Value::Text(s) = name {
+            if s == "archived_at" {
+                found = true;
+            }
+        }
+    }
+    assert!(found, "branch table should have archived_at column");
+}
+
+#[tokio::test]
+async fn migrate_creates_branch_active_index() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let mut rows = conn
+        .query(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_branch_active_name'",
+            (),
+        )
+        .await
+        .expect("query indexes");
+    let mut found = false;
+    while let Some(row) = rows.next().await.expect("next row") {
+        let name = row.get_value(0).expect("index name");
+        if let Value::Text(s) = name {
+            if s == "idx_branch_active_name" {
+                found = true;
+            }
+        }
+    }
+    assert!(found, "should have idx_branch_active_name index");
 }

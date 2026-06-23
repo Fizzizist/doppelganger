@@ -390,3 +390,171 @@ async fn branch_read_hides_hidden_comments_by_default() {
         .expect("comments");
     assert_eq!(comments.len(), 2, "should have both comments with --hidden");
 }
+
+#[tokio::test]
+async fn branch_archive_succeeds() {
+    let repo = TestRepo::new_with_commit();
+    setup_with_issue(&repo);
+
+    repo.dg_command()
+        .arg("branch")
+        .arg("create")
+        .arg("1")
+        .arg("my branch")
+        .output()
+        .expect("branch create failed");
+
+    let output = repo
+        .dg_command()
+        .arg("branch")
+        .arg("archive")
+        .output()
+        .expect("command failed to execute");
+    assert!(
+        output.status.success(),
+        "archive should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = std::str::from_utf8(&output.stdout).expect("valid utf8");
+    let json: serde_json::Value = serde_json::from_str(stdout).expect("valid JSON");
+    assert_eq!(
+        json.get("description").and_then(|v| v.as_str()),
+        Some("my branch")
+    );
+    assert!(
+        json.get("archived_at").and_then(|v| v.as_str()).is_some(),
+        "archived_at should be set in JSON output"
+    );
+}
+
+#[tokio::test]
+async fn branch_archive_no_branch_fails() {
+    let repo = TestRepo::new_with_commit();
+
+    let output = repo
+        .dg_command()
+        .arg("branch")
+        .arg("archive")
+        .output()
+        .expect("command failed to execute");
+    assert!(
+        !output.status.success(),
+        "archive should fail when no branch record exists: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("branch create"),
+        "stderr should prompt the user to create a branch, got: {stderr}"
+    );
+}
+
+#[tokio::test]
+async fn branch_read_after_archive_fails() {
+    let repo = TestRepo::new_with_commit();
+    setup_with_issue(&repo);
+
+    repo.dg_command()
+        .arg("branch")
+        .arg("create")
+        .arg("1")
+        .arg("my branch")
+        .output()
+        .expect("branch create failed");
+
+    repo.dg_command()
+        .arg("branch")
+        .arg("archive")
+        .output()
+        .expect("archive failed");
+
+    let output = repo
+        .dg_command()
+        .arg("branch")
+        .arg("read")
+        .output()
+        .expect("command failed to execute");
+    assert!(
+        !output.status.success(),
+        "read should fail after archive: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("branch create"),
+        "stderr should prompt the user to create a branch, got: {stderr}"
+    );
+}
+
+#[tokio::test]
+async fn branch_comment_after_archive_fails() {
+    let repo = TestRepo::new_with_commit();
+    setup_with_issue(&repo);
+
+    repo.dg_command()
+        .arg("branch")
+        .arg("create")
+        .arg("1")
+        .arg("my branch")
+        .output()
+        .expect("branch create failed");
+
+    repo.dg_command()
+        .arg("branch")
+        .arg("archive")
+        .output()
+        .expect("archive failed");
+
+    let output = repo
+        .dg_command()
+        .arg("branch")
+        .arg("comment")
+        .arg("hello")
+        .output()
+        .expect("command failed to execute");
+    assert!(
+        !output.status.success(),
+        "comment should fail after archive: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("branch create"),
+        "stderr should prompt the user to create a branch, got: {stderr}"
+    );
+}
+
+#[tokio::test]
+async fn branch_read_shows_archived_at_field() {
+    let repo = TestRepo::new_with_commit();
+    setup_with_issue(&repo);
+
+    repo.dg_command()
+        .arg("branch")
+        .arg("create")
+        .arg("1")
+        .arg("my branch")
+        .output()
+        .expect("branch create failed");
+
+    let output = repo
+        .dg_command()
+        .arg("branch")
+        .arg("read")
+        .output()
+        .expect("branch read failed");
+    assert!(output.status.success());
+
+    let stdout = std::str::from_utf8(&output.stdout).expect("valid utf8");
+    let json: serde_json::Value = serde_json::from_str(stdout).expect("valid JSON");
+    let branch = json.get("branch").expect("branch field");
+    assert!(
+        branch.get("archived_at").is_some(),
+        "branch JSON should have archived_at field"
+    );
+    assert!(
+        branch.get("archived_at").and_then(|v| v.as_str()).is_none(),
+        "archived_at should be null for active branch"
+    );
+}

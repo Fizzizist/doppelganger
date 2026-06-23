@@ -87,6 +87,7 @@ pub enum BranchCommands {
     Comment {
         content: Option<String>,
     },
+    Archive,
     Tui,
 }
 

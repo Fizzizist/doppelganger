@@ -59,7 +59,7 @@ impl From<&Branch> for Thread {
             updated_at: branch.updated_at.clone(),
             description: branch.description.clone(),
             comments: Vec::new(),
-            archived: false,
+            archived: branch.archived_at.is_some(),
         }
     }
 }
@@ -132,6 +132,7 @@ mod tests {
             issue_id: 7,
             created_at: "2025-01-01 00:00:00".to_string(),
             updated_at: "2025-01-02 00:00:00".to_string(),
+            archived_at: None,
         }
     }
 
@@ -276,5 +277,17 @@ mod tests {
         assert_eq!(tc.author, "Bob");
         assert_eq!(tc.content, "World");
         assert!(!tc.hidden);
+    }
+
+    #[test]
+    fn from_branch_reflects_archived_at() {
+        let mut branch = test_branch();
+        branch.archived_at = Some("2025-01-03 00:00:00".to_string());
+        let thread = Thread::from(&branch);
+        assert!(thread.archived);
+
+        branch.archived_at = None;
+        let thread = Thread::from(&branch);
+        assert!(!thread.archived);
     }
 }
