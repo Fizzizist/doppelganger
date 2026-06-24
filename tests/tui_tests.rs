@@ -527,6 +527,65 @@ fn thread_render_archived_no_input_box() {
 }
 
 #[test]
+fn thread_render_archived_branch() {
+    let branch = Branch {
+        branch_id: 1,
+        name: "feature/old-thing".to_string(),
+        description: "This branch is no longer needed.".to_string(),
+        author: "Alice".to_string(),
+        issue_id: 1,
+        created_at: "2025-01-01 00:00:00".to_string(),
+        updated_at: "2025-06-01 09:00:00".to_string(),
+        archived_at: Some("2025-06-01 09:00:00".to_string()),
+    };
+    let thread = Thread::from(&BranchWithComments {
+        branch,
+        comments: Vec::new(),
+    });
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    assert!(
+        output.contains("[ARCHIVED]"),
+        "archived branch thread must show [ARCHIVED] header, got:\n{output}"
+    );
+    insta::assert_snapshot!("thread_archived_branch", output);
+}
+
+#[test]
+fn thread_render_archived_branch_no_input_box() {
+    let branch = Branch {
+        branch_id: 1,
+        name: "feature/old-thing".to_string(),
+        description: "This branch is no longer needed.".to_string(),
+        author: "Alice".to_string(),
+        issue_id: 1,
+        created_at: "2025-01-01 00:00:00".to_string(),
+        updated_at: "2025-06-01 09:00:00".to_string(),
+        archived_at: Some("2025-06-01 09:00:00".to_string()),
+    };
+    let thread = Thread::from(&BranchWithComments {
+        branch,
+        comments: Vec::new(),
+    });
+
+    let mut app = App::default();
+    app.screen = Screen::Thread;
+    app.thread = Some(thread);
+    app.focus_input_box();
+
+    let output = render_to_string(80, 24, |f| view::thread::render(f, &mut app));
+    assert!(
+        output.contains("[ARCHIVED]"),
+        "archived branch thread must show [ARCHIVED] header"
+    );
+    insta::assert_snapshot!("thread_archived_branch_no_input_box", output);
+}
+
+#[test]
 fn issue_list_show_archived_view() {
     let mut app = App::default();
     app.show_archived = true;

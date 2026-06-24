@@ -56,3 +56,19 @@ pub const ALTER_TABLE_BRANCH_COMMENT_HIDDEN_AT: &str =
 pub const ALTER_TABLE_BRANCH_ARCHIVED_AT: &str = "ALTER TABLE branch ADD COLUMN archived_at TEXT";
 
 pub const CREATE_INDEX_BRANCH_ACTIVE_NAME: &str = "CREATE UNIQUE INDEX IF NOT EXISTS idx_branch_active_name ON branch(name) WHERE archived_at IS NULL";
+
+pub const BRANCH_TABLE_NEW: &str = r#"
+CREATE TABLE IF NOT EXISTS branch_new (
+    branch_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    author_id INTEGER NOT NULL REFERENCES author(author_id),
+    issue_id INTEGER NOT NULL REFERENCES issue(issue_id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    archived_at TEXT
+)"#;
+
+pub const DROP_BRANCH_OLD: &str = "DROP TABLE IF EXISTS branch";
+
+pub const RENAME_BRANCH_NEW: &str = "ALTER TABLE branch_new RENAME TO branch";

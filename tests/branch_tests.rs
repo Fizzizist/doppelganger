@@ -558,3 +558,40 @@ async fn branch_read_shows_archived_at_field() {
         "archived_at should be null for active branch"
     );
 }
+
+#[tokio::test]
+async fn branch_tui_after_archive_fails() {
+    let repo = TestRepo::new_with_commit();
+    setup_with_issue(&repo);
+
+    repo.dg_command()
+        .arg("branch")
+        .arg("create")
+        .arg("1")
+        .arg("my branch")
+        .output()
+        .expect("branch create failed");
+
+    repo.dg_command()
+        .arg("branch")
+        .arg("archive")
+        .output()
+        .expect("archive failed");
+
+    let output = repo
+        .dg_command()
+        .arg("branch")
+        .arg("tui")
+        .output()
+        .expect("command failed to execute");
+    assert!(
+        !output.status.success(),
+        "branch tui should fail after archive: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not found") || stderr.contains("branch create"),
+        "stderr should explain the missing branch, got: {stderr}"
+    );
+}

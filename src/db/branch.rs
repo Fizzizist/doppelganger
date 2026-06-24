@@ -105,15 +105,30 @@ pub async fn update_description(
     name: &str,
     description: &str,
 ) -> Result<Branch> {
-    conn.execute(
-        "UPDATE branch SET description = ?1, updated_at = datetime('now') \
-         WHERE name = ?2 AND archived_at IS NULL",
-        turso::params::Params::Positional(vec![
-            Value::Text(description.to_string()),
-            Value::Text(name.to_string()),
-        ]),
-    )
-    .await?;
+    let rows_affected = conn
+        .execute(
+            "UPDATE branch SET description = ?1, updated_at = datetime('now') \
+             WHERE name = ?2 AND archived_at IS NULL",
+            turso::params::Params::Positional(vec![
+                Value::Text(description.to_string()),
+                Value::Text(name.to_string()),
+            ]),
+        )
+        .await?;
+
+    if rows_affected == 0 {
+        match get_by_name(conn, name).await {
+            Ok(_) => {
+                return Err(Error::Validation(format!(
+                    "branch '{name}' is archived and cannot be updated"
+                )));
+            }
+            Err(Error::BranchNotFound(_)) => {
+                return Err(Error::BranchNotFound(name.to_string()));
+            }
+            Err(e) => return Err(e),
+        }
+    }
 
     get_active_by_name(conn, name).await
 }
@@ -156,6 +171,10 @@ mod tests {
             .expect("archive");
         let fetched = super::get_by_id(conn, br.branch_id).await.expect("get");
         assert!(fetched.archived_at.is_some());
+        assert!(
+            fetched.updated_at >= br.updated_at,
+            "updated_at must not go backwards after archiving"
+        );
     }
 
     #[tokio::test]
@@ -310,5 +329,14 @@ mod tests {
 
         let result = super::update_description(conn, "feature-1", "updated").await;
         assert!(result.is_err(), "should not update archived branch");
+        match result.unwrap_err() {
+            crate::error::Error::Validation(msg) => {
+                assert!(
+                    msg.contains("archived"),
+                    "error should mention archived, got: {msg}"
+                );
+            }
+            other => panic!("expected Validation error for archived branch, got {other:?}"),
+        }
     }
 }

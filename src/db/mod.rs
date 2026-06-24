@@ -10,6 +10,7 @@ use crate::error::{Error, Result, classify_db_error};
 
 pub struct Database {
     conn: turso::Connection,
+    path: Option<String>,
 }
 
 impl Database {
@@ -24,7 +25,10 @@ impl Database {
                     .build()
                     .await?;
                 let conn = db.connect()?;
-                let database = Self { conn };
+                let database = Self {
+                    conn,
+                    path: Some(path.to_string()),
+                };
                 database.prepare().await?;
                 Ok(database)
             }
@@ -50,7 +54,7 @@ impl Database {
     pub async fn open_in_memory() -> Result<Self> {
         let db = turso::Builder::new_local(":memory:").build().await?;
         let conn = db.connect()?;
-        let database = Self { conn };
+        let database = Self { conn, path: None };
         database.prepare().await?;
         Ok(database)
     }
@@ -69,6 +73,7 @@ impl Database {
         self.migrate_remote_id().await?;
         self.migrate_archived_at().await?;
         self.migrate_hidden_at().await?;
+        self.migrate_branch_drop_unique().await?;
         self.migrate_branch_archived_at().await?;
         self.migrate_branch_active_index().await?;
         Ok(())
@@ -125,6 +130,61 @@ impl Database {
         }
     }
 
+    async fn migrate_branch_drop_unique(&self) -> Result<()> {
+        let mut rows = self
+            .conn
+            .query(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='branch'",
+                (),
+            )
+            .await?;
+
+        let table_sql = match rows.next().await? {
+            Some(row) => {
+                let val = row.get_value(0)?;
+                match val {
+                    turso::Value::Text(s) => s,
+                    _ => return Ok(()),
+                }
+            }
+            None => return Ok(()),
+        };
+
+        if !table_sql
+            .to_lowercase()
+            .contains("name text not null unique")
+        {
+            return Ok(());
+        }
+
+        tracing::info!("recreating branch table to drop UNIQUE constraint on name");
+
+        let Some(db_path) = &self.path else {
+            return Ok(());
+        };
+        self.checkpoint().await?;
+
+        let non_wal_db = turso::Builder::new_local(db_path).build().await?;
+        let non_wal_conn = non_wal_db.connect()?;
+
+        non_wal_conn
+            .execute("PRAGMA foreign_keys = OFF", ())
+            .await?;
+        non_wal_conn.execute(schema::BRANCH_TABLE_NEW, ()).await?;
+        non_wal_conn
+            .execute(
+                "INSERT INTO branch_new (branch_id, name, description, author_id, issue_id, created_at, updated_at) \
+                 SELECT branch_id, name, description, author_id, issue_id, created_at, updated_at FROM branch",
+                (),
+            )
+            .await?;
+        non_wal_conn.execute(schema::DROP_BRANCH_OLD, ()).await?;
+        non_wal_conn.execute(schema::RENAME_BRANCH_NEW, ()).await?;
+        non_wal_conn.execute("PRAGMA foreign_keys = ON", ()).await?;
+
+        Ok(())
+    }
+
     async fn migrate_branch_active_index(&self) -> Result<()> {
         match self
             .conn
@@ -133,6 +193,11 @@ impl Database {
         {
             Ok(_) => Ok(()),
             Err(e) if e.to_string().contains("already exists") => Ok(()),
+            Err(turso::Error::Constraint(_)) => Err(Error::Validation(
+                "cannot create unique index idx_branch_active_name: duplicate active branch names exist; \
+                 archive duplicates with `dg branch archive` first"
+                    .to_string(),
+            )),
             Err(e) => Err(classify_db_error(e)),
         }
     }
