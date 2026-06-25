@@ -1,0 +1,8 @@
+---
+source: tests/tui_tests.rs
+expression: output
+---
+#1 feature/old-thing  Alice  2025-06-01 09:00:00  [ARCHIVED]                    
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+│ This branch is no longer needed.

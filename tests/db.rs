@@ -1,6 +1,7 @@
 mod common;
 
 use doppelganger::db::{Database, author, branch, comment, issue};
+use turso::Value;
 
 #[tokio::test]
 async fn migrate_is_idempotent() {
@@ -506,4 +507,143 @@ async fn migration_adds_remote_id_to_existing_db() {
 async fn migration_remote_id_is_idempotent() {
     let db = Database::open_in_memory().await.expect("open in-memory db");
     db.migrate().await.expect("second migrate should succeed");
+}
+
+#[tokio::test]
+async fn migrate_adds_branch_archived_at() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let mut rows = conn
+        .query("PRAGMA table_info(branch)", ())
+        .await
+        .expect("pragma query");
+    let mut found = false;
+    while let Some(row) = rows.next().await.expect("next row") {
+        let name = row.get_value(1).expect("column name");
+        if let Value::Text(s) = name {
+            if s == "archived_at" {
+                found = true;
+            }
+        }
+    }
+    assert!(found, "branch table should have archived_at column");
+}
+
+#[tokio::test]
+async fn migrate_creates_branch_active_index() {
+    let db = Database::open_in_memory().await.expect("open in-memory db");
+    let conn = db.conn();
+
+    let mut rows = conn
+        .query(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_branch_active_name'",
+            (),
+        )
+        .await
+        .expect("query indexes");
+    let mut found = false;
+    while let Some(row) = rows.next().await.expect("next row") {
+        let name = row.get_value(0).expect("index name");
+        if let Value::Text(s) = name {
+            if s == "idx_branch_active_name" {
+                found = true;
+            }
+        }
+    }
+    assert!(found, "should have idx_branch_active_name index");
+}
+
+#[tokio::test]
+async fn migrate_drops_unique_constraint_from_legacy_branch_table() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let db_path = tmp.path().join("legacy_unique.db");
+    let db_path_str = db_path.to_str().expect("valid path");
+
+    {
+        let db = Database::open(db_path_str).await.expect("open db");
+        let conn = db.conn();
+        let author = author::find_or_create(conn, "Legacy", None)
+            .await
+            .expect("author");
+        let iss = issue::create(conn, None, "desc", author.author_id, None)
+            .await
+            .expect("issue");
+        branch::create(conn, "old-name", "desc", author.author_id, iss.issue_id)
+            .await
+            .expect("branch");
+        db.checkpoint().await.expect("checkpoint");
+    }
+
+    // Simulate a legacy DB by recreating the branch table with the old UNIQUE constraint
+    {
+        let db = Database::open(db_path_str).await.expect("reopen db");
+        let conn = db.conn();
+        conn.execute("ALTER TABLE branch RENAME TO branch_old", ())
+            .await
+            .expect("rename old branch");
+        conn.execute(
+            "CREATE TABLE branch (\
+             branch_id INTEGER PRIMARY KEY AUTOINCREMENT,\
+             name TEXT NOT NULL UNIQUE,\
+             description TEXT NOT NULL,\
+             author_id INTEGER NOT NULL REFERENCES author(author_id),\
+             issue_id INTEGER NOT NULL REFERENCES issue(issue_id),\
+             created_at TEXT NOT NULL DEFAULT (datetime('now')),\
+             updated_at TEXT NOT NULL DEFAULT (datetime('now'))\
+             )",
+            (),
+        )
+        .await
+        .expect("create legacy branch table");
+        conn.execute(
+            "INSERT INTO branch (branch_id, name, description, author_id, issue_id, created_at, updated_at) \
+             SELECT branch_id, name, description, author_id, issue_id, created_at, updated_at FROM branch_old",
+            (),
+        )
+        .await
+        .expect("copy data");
+        conn.execute("DROP TABLE branch_old", ())
+            .await
+            .expect("drop old");
+        db.checkpoint().await.expect("checkpoint");
+    }
+
+    // Now re-open — migration should detect the UNIQUE constraint and recreate the table
+    let db = Database::open(db_path_str)
+        .await
+        .expect("reopen after migration");
+    let conn = db.conn();
+
+    // Verify the table no longer has UNIQUE on name
+    let mut rows = conn
+        .query(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='branch'",
+            (),
+        )
+        .await
+        .expect("query table def");
+    let table_sql = match rows.next().await.expect("next row") {
+        Some(row) => {
+            let val = row.get_value(0).expect("sql value");
+            match val {
+                Value::Text(s) => s.to_lowercase(),
+                _ => panic!("expected text for table sql"),
+            }
+        }
+        None => panic!("branch table should exist"),
+    };
+    assert!(
+        !table_sql.contains("name text not null unique"),
+        "branch table should no longer have UNIQUE constraint on name, got: {table_sql}"
+    );
+
+    // Verify archived_at column exists (migration added it after table recreation)
+    let br = branch::get_by_name(conn, "old-name")
+        .await
+        .expect("get branch");
+    assert!(
+        br.archived_at.is_none(),
+        "existing branch should have null archived_at"
+    );
 }

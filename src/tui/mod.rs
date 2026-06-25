@@ -246,7 +246,7 @@ async fn submit_comment(db_path: &str, app: &mut App) -> Result<()> {
             db::comment::create_issue_comment(conn, issue_id, &content, author.author_id).await?;
         }
         TuiMode::Branch { branch_name } => {
-            let branch = db::branch::get_by_name(conn, branch_name).await?;
+            let branch = db::branch::get_active_by_name(conn, branch_name).await?;
             db::comment::create_branch_comment(conn, branch.branch_id, &content, author.author_id)
                 .await?;
         }
