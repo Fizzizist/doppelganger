@@ -104,6 +104,53 @@ sequenceDiagram
     Me->>GitHub: Refine description and set as ready for review
 ```
 
+## Controls
+
+### Issue List
+
+| Key | Action |
+|-----|--------|
+| `q` / `Esc` | Quit |
+| `j` / `↓` | Move selection down |
+| `k` / `↑` | Move selection up |
+| `Enter` / `l` | Open selected issue thread |
+| `n` | Create new issue (opens name input) |
+| `a` | Toggle archive on selected issue |
+| `A` | Toggle showing archived issues |
+
+### Thread — Navigating
+
+| Key | Action |
+|-----|--------|
+| `q` / `Esc` / `h` | Return to issue list |
+| `j` / `↓` | Move selection down |
+| `k` / `↑` | Move selection up |
+| `e` | Edit selected item (description or comment) |
+| `H` | Toggle hidden on selected comment |
+| `Ctrl+u` | Scroll up |
+| `Ctrl+d` | Scroll down |
+| `Ctrl+w` `j` | Focus the comment input box |
+| `Ctrl+w` `k` | Focus the thread |
+
+### Thread — Comment Input Box
+
+The input box is a [vim-mode text editor](https://crates.io/crates/hjkl-engine). All standard hjkl-engine keybindings apply. Of note:
+
+| Key | Action |
+|-----|--------|
+| `Esc` | Exit insert/visual mode (or return focus to thread if already in normal mode) |
+| `Enter` (normal mode) | Submit comment |
+| `Enter` (insert mode) | Insert newline |
+
+### Modals
+
+| Key | Name Input Modal | Error Modal |
+|-----|-------------------|------------|
+| `Esc` | Cancel | Dismiss |
+| `Enter` | Confirm | Dismiss |
+| `Backspace` | Delete last character | — |
+| Printable chars | Append to name | — |
+
 ## Installation
 
 ```sh
