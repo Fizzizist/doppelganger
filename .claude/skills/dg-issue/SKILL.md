@@ -60,7 +60,7 @@ Present to the user:
 2. **Current state**: What exists today that's relevant
 3. **Gaps**: What's missing, broken, or unclear
 4. **Ambiguities**: Underspecified aspects or open questions
-5. **Scope**: Size and complexity estimate
+5. **Scope**: Size and complexity estimate -- if the task cannot be done in <500 LOC, suggest it be broken down further
 6. **Risks**: Pitfalls, edge cases, architectural concerns
 
 ### Step 5: Post assessment
