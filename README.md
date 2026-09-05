@@ -104,6 +104,10 @@ sequenceDiagram
     Me->>GitHub: Refine description and set as ready for review
 ```
 
+## Remote Issue Sync
+
+`dg issue sync N` imports a remote issue into a local thread. The forge is detected from the repository's `origin` URL: `github.com` remotes use the `[github]` config section, `gitlab.com` remotes use the `[gitlab]` section. Other hosts (e.g. Bitbucket) are not supported. Remote issue bodies and comments are pulled in on sync; local conversation stays entirely in Doppelganger and is never pushed to the forge.
+
 ## Controls
 
 ### Issue List
