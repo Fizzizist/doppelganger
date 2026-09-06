@@ -32,31 +32,44 @@ pub struct RemoteTarget {
     pub secure: bool,
 }
 
+/// Both the `ring` and `aws_lc_rs` rustls features are enabled in this crate's
+/// dependency tree, so rustls cannot pick a provider from crate features alone.
+/// Installing one process default resolves the ambiguity for every client stack.
+pub fn ensure_default_crypto_provider() {
+    // A second install errs; the outcome (a ring default) is identical either way.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
 pub async fn provider_from_config(
     config: &crate::config::Config,
     repo: &git2::Repository,
 ) -> Result<Box<dyn Provider>> {
     let url = crate::git::remote_url(repo)?;
     let target = parse_remote_url(&url)?;
+    let missing_token = |forge: &str| {
+        Error::RemoteSync(format!(
+            "remote token not configured; add a [{forge}] section with token to your config"
+        ))
+    };
     match target.forge {
         Forge::GitHub => {
-            let github_config = config.github.as_ref().ok_or_else(|| {
-                Error::RemoteSync(
-                    "remote token not configured; add a [github] section with token to your config"
-                        .to_string(),
-                )
-            })?;
-            let (owner, repo_name) = target.project_path.split_once('/').ok_or(Error::NoRemote)?;
-            let provider = github::GitHubProvider::new(&github_config.token, owner, repo_name)?;
+            let github_config = config
+                .github
+                .as_ref()
+                .ok_or_else(|| missing_token("github"))?;
+            let (owner, repo_name) = target
+                .project_path
+                .split_once('/')
+                .expect("github project_path always has exactly owner/repo");
+            let provider =
+                github::GitHubProvider::new(&github_config.token, owner, repo_name).await?;
             Ok(Box::new(provider))
         }
         Forge::GitLab => {
-            let gitlab_config = config.gitlab.as_ref().ok_or_else(|| {
-                Error::RemoteSync(
-                    "remote token not configured; add a [gitlab] section with token to your config"
-                        .to_string(),
-                )
-            })?;
+            let gitlab_config = config
+                .gitlab
+                .as_ref()
+                .ok_or_else(|| missing_token("gitlab"))?;
             let provider = gitlab::GitLabProvider::new(
                 &gitlab_config.token,
                 &target.project_path,
@@ -69,16 +82,13 @@ pub async fn provider_from_config(
     }
 }
 
-pub fn detect_host(url: &str) -> Result<Forge> {
-    parse_remote_url(url).map(|target| target.forge)
-}
-
 pub fn parse_remote_url(url: &str) -> Result<RemoteTarget> {
-    let (host, path, secure) = split_remote_url(url).ok_or(Error::NoRemote)?;
+    let (host, path, secure) =
+        split_remote_url(url).ok_or_else(|| Error::MalformedRemote(url.to_string()))?;
     let forge = match host.to_ascii_lowercase().as_str() {
         "github.com" => Forge::GitHub,
         "gitlab.com" => Forge::GitLab,
-        _ => return Err(Error::UnsupportedHost(url.to_string())),
+        _ => return Err(Error::UnsupportedHost(host.clone())),
     };
     let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
     let valid = match forge {
@@ -86,7 +96,7 @@ pub fn parse_remote_url(url: &str) -> Result<RemoteTarget> {
         Forge::GitLab => segments.len() >= 2,
     };
     if !valid {
-        return Err(Error::NoRemote);
+        return Err(Error::MalformedRemote(url.to_string()));
     }
     Ok(RemoteTarget {
         forge,
@@ -100,18 +110,16 @@ fn split_remote_url(url: &str) -> Option<(String, String, bool)> {
     let url = url.trim();
     let url = url.strip_suffix(".git").unwrap_or(url);
 
-    if let Some(rest) = url.strip_prefix("https://") {
-        let (host, path) = split_authority_path(rest)?;
-        return Some((host, path, true));
-    }
-    if let Some(rest) = url.strip_prefix("http://") {
-        let (host, path) = split_authority_path(rest)?;
-        return Some((host, path, false));
-    }
-    if let Some(rest) = url.strip_prefix("ssh://") {
-        let rest = rest.strip_prefix("git@").unwrap_or(rest);
-        let (host, path) = split_authority_path(rest)?;
-        return Some((host, path, true));
+    for (scheme, secure) in [("https://", true), ("http://", false), ("ssh://", true)] {
+        if let Some(rest) = url.strip_prefix(scheme) {
+            let rest = if scheme == "ssh://" {
+                rest.strip_prefix("git@").unwrap_or(rest)
+            } else {
+                rest
+            };
+            let (host, path) = split_authority_path(rest)?;
+            return Some((host, path, secure));
+        }
     }
 
     let (host_part, path) = url.split_once(':')?;
@@ -141,44 +149,44 @@ mod tests {
 
     #[test]
     fn detect_github_from_scp_style_url() {
-        let forge = detect_host("git@github.com:octocat/Hello-World.git").unwrap();
-        assert_eq!(forge, Forge::GitHub);
+        let target = parse_remote_url("git@github.com:octocat/Hello-World.git").unwrap();
+        assert_eq!(target.forge, Forge::GitHub);
     }
 
     #[test]
     fn detect_github_from_https_url() {
-        let forge = detect_host("https://github.com/octocat/Hello-World.git").unwrap();
-        assert_eq!(forge, Forge::GitHub);
+        let target = parse_remote_url("https://github.com/octocat/Hello-World.git").unwrap();
+        assert_eq!(target.forge, Forge::GitHub);
     }
 
     #[test]
     fn detect_github_from_ssh_scheme_url() {
-        let forge = detect_host("ssh://git@github.com/octocat/Hello-World").unwrap();
-        assert_eq!(forge, Forge::GitHub);
+        let target = parse_remote_url("ssh://git@github.com/octocat/Hello-World").unwrap();
+        assert_eq!(target.forge, Forge::GitHub);
     }
 
     #[test]
     fn detect_github_from_ssh_scheme_url_with_port() {
-        let forge = detect_host("ssh://git@github.com:22/octocat/Hello-World.git").unwrap();
-        assert_eq!(forge, Forge::GitHub);
+        let target = parse_remote_url("ssh://git@github.com:22/octocat/Hello-World.git").unwrap();
+        assert_eq!(target.forge, Forge::GitHub);
     }
 
     #[test]
     fn detect_gitlab_from_scp_style_url() {
-        let forge = detect_host("git@gitlab.com:group/subgroup/project.git").unwrap();
-        assert_eq!(forge, Forge::GitLab);
+        let target = parse_remote_url("git@gitlab.com:group/subgroup/project.git").unwrap();
+        assert_eq!(target.forge, Forge::GitLab);
     }
 
     #[test]
     fn detect_gitlab_from_https_url() {
-        let forge = detect_host("https://gitlab.com/group/project.git").unwrap();
-        assert_eq!(forge, Forge::GitLab);
+        let target = parse_remote_url("https://gitlab.com/group/project.git").unwrap();
+        assert_eq!(target.forge, Forge::GitLab);
     }
 
     #[test]
     fn detect_gitlab_from_ssh_scheme_url_with_port() {
-        let forge = detect_host("ssh://git@gitlab.com:2222/group/project").unwrap();
-        assert_eq!(forge, Forge::GitLab);
+        let target = parse_remote_url("ssh://git@gitlab.com:2222/group/project").unwrap();
+        assert_eq!(target.forge, Forge::GitLab);
     }
 
     #[test]
@@ -208,7 +216,7 @@ mod tests {
     fn parse_unsupported_host_errors() {
         let url = "https://bitbucket.org/owner/repo.git";
         match parse_remote_url(url) {
-            Err(Error::UnsupportedHost(remote)) => assert_eq!(remote, url),
+            Err(Error::UnsupportedHost(remote)) => assert_eq!(remote, "bitbucket.org"),
             other => panic!("expected UnsupportedHost, got {other:?}"),
         }
     }
@@ -216,12 +224,18 @@ mod tests {
     #[test]
     fn parse_github_path_with_one_segment_errors() {
         let url = "https://github.com/octocat";
-        assert!(matches!(parse_remote_url(url), Err(Error::NoRemote)));
+        assert!(matches!(
+            parse_remote_url(url),
+            Err(Error::MalformedRemote(_))
+        ));
     }
 
     #[test]
     fn parse_gitlab_path_with_one_segment_errors() {
         let url = "https://gitlab.com/project";
-        assert!(matches!(parse_remote_url(url), Err(Error::NoRemote)));
+        assert!(matches!(
+            parse_remote_url(url),
+            Err(Error::MalformedRemote(_))
+        ));
     }
 }

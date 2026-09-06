@@ -6,6 +6,8 @@ use gitlab::{
 };
 use serde::Deserialize;
 
+const CONSTRUCTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 pub struct GitLabProvider {
     client: AsyncGitlab,
     project_path: String,
@@ -13,29 +15,39 @@ pub struct GitLabProvider {
 }
 
 #[derive(Debug, Deserialize)]
-struct GitlabIssue {
+struct GitLabIssue {
     #[serde(default)]
     title: Option<String>,
     #[serde(default)]
     description: Option<String>,
     #[serde(default)]
-    author: GitlabUser,
+    author: Option<GitLabUser>,
 }
 
 #[derive(Debug, Deserialize)]
-struct GitlabNote {
+struct GitLabNote {
     #[serde(default)]
     body: Option<String>,
     #[serde(default)]
-    author: GitlabUser,
+    author: Option<GitLabUser>,
     #[serde(default)]
     system: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct GitlabUser {
+struct GitLabUser {
     #[serde(default)]
     username: Option<String>,
+}
+
+fn error_chain(e: &dyn std::error::Error) -> String {
+    let mut chain = String::new();
+    let mut source = e.source();
+    while let Some(cause) = source {
+        chain.push_str(&format!(": {cause}"));
+        source = cause.source();
+    }
+    chain
 }
 
 impl GitLabProvider {
@@ -44,10 +56,22 @@ impl GitLabProvider {
         if !secure {
             builder.insecure();
         }
-        let client = builder
-            .build_async()
-            .await
-            .map_err(|e| Error::Remote(format!("failed to build GitLab client: {e}")))?;
+        let build = tokio::time::timeout(CONSTRUCTION_TIMEOUT, builder.build_async()).await;
+        let client = match build {
+            Ok(Ok(client)) => client,
+            Ok(Err(e)) => {
+                return Err(Error::Remote(format!(
+                    "failed to build GitLab client: {e}{}",
+                    error_chain(&e)
+                )));
+            }
+            Err(_) => {
+                return Err(Error::Remote(format!(
+                    "timed out building GitLab client after {}s",
+                    CONSTRUCTION_TIMEOUT.as_secs()
+                )));
+            }
+        };
         Ok(Self {
             client,
             project_path: project_path.to_string(),
@@ -71,7 +95,7 @@ impl Provider for GitLabProvider {
             .issue(iid)
             .build()
             .map_err(|e| Error::Remote(format!("failed to build GitLab issue query: {e}")))?;
-        let issue: GitlabIssue = endpoint.query_async(&self.client).await.map_err(|e| {
+        let issue: GitLabIssue = endpoint.query_async(&self.client).await.map_err(|e| {
             Error::Remote(format!(
                 "failed to fetch GitLab issue !{issue_iid} from {}: {e}",
                 self.project_path
@@ -85,7 +109,7 @@ impl Provider for GitLabProvider {
             .sort(gitlab::api::common::SortOrder::Ascending)
             .build()
             .map_err(|e| Error::Remote(format!("failed to build GitLab notes query: {e}")))?;
-        let notes: Vec<GitlabNote> = api::paged(notes_endpoint, Pagination::All)
+        let notes: Vec<GitLabNote> = api::paged(notes_endpoint, Pagination::All)
             .query_async(&self.client)
             .await
             .map_err(|e| {
@@ -99,7 +123,7 @@ impl Provider for GitLabProvider {
             .into_iter()
             .filter(|note| !note.system)
             .map(|note| {
-                let author = note.author.username.unwrap_or_default();
+                let author = note.author.unwrap_or_default().username.unwrap_or_default();
                 let body = note.body.unwrap_or_default();
                 RemoteComment { author, body }
             })
@@ -111,7 +135,11 @@ impl Provider for GitLabProvider {
             remote_id,
             title: issue.title,
             body: issue.description.unwrap_or_default(),
-            author: issue.author.username.unwrap_or_default(),
+            author: issue
+                .author
+                .unwrap_or_default()
+                .username
+                .unwrap_or_default(),
             comments,
         })
     }
@@ -149,16 +177,20 @@ mod tests {
         notes
     }
 
-    async fn mock_gitlab() -> MockServer {
-        let server = MockServer::start().await;
-
+    async fn mount_user_endpoint(server: &MockServer) {
         Mock::given(method("GET"))
             .and(path("/api/v4/user"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "id": 1, "username": "test"
             })))
-            .mount(&server)
+            .mount(server)
             .await;
+    }
+
+    async fn mock_gitlab() -> MockServer {
+        let server = MockServer::start().await;
+
+        mount_user_endpoint(&server).await;
 
         Mock::given(method("GET"))
             .and(path("/api/v4/projects/testowner%2Ftestrepo/issues/1"))
@@ -235,11 +267,7 @@ mod tests {
     async fn fetch_issue_404_errors_mentioning_gitlab() {
         let server = MockServer::start().await;
 
-        Mock::given(method("GET"))
-            .and(path("/api/v4/user"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": 1})))
-            .mount(&server)
-            .await;
+        mount_user_endpoint(&server).await;
 
         Mock::given(method("GET"))
             .and(path("/api/v4/projects/testowner%2Ftestrepo/issues/99"))
@@ -266,11 +294,7 @@ mod tests {
     async fn fetch_issue_server_error_errors() {
         let server = MockServer::start().await;
 
-        Mock::given(method("GET"))
-            .and(path("/api/v4/user"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": 1})))
-            .mount(&server)
-            .await;
+        mount_user_endpoint(&server).await;
 
         Mock::given(method("GET"))
             .and(path("/api/v4/projects/testowner%2Ftestrepo/issues/1"))
@@ -299,55 +323,32 @@ mod tests {
             "id": 1, "iid": 2, "title": null, "description": null,
             "state": "opened", "author": {"id": 1, "username": null}
         }"#;
-        let issue: GitlabIssue = serde_json::from_str(body).expect("deserialize");
+        let issue: GitLabIssue = serde_json::from_str(body).expect("deserialize");
         assert!(issue.title.is_none());
         assert!(issue.description.is_none());
-        assert_eq!(issue.author.username, None);
+        assert!(issue.author.is_some());
+        assert_eq!(issue.author.expect("author present").username, None);
+    }
+
+    #[test]
+    fn issue_dto_tolerates_null_author() {
+        let body = r#"{"id": 1, "iid": 2, "state": "opened", "author": null}"#;
+        let issue: GitLabIssue = serde_json::from_str(body).expect("deserialize");
+        assert!(issue.author.is_none());
     }
 
     #[test]
     fn note_dto_defaults_missing_system_flag() {
         let body = r#"{"body": "hello", "author": {"id": 1, "username": "uhura"}}"#;
-        let note: GitlabNote = serde_json::from_str(body).expect("deserialize");
+        let note: GitLabNote = serde_json::from_str(body).expect("deserialize");
         assert!(!note.system);
         assert_eq!(note.body.as_deref(), Some("hello"));
     }
 
     #[test]
-    fn system_notes_are_filtered_and_order_preserved() {
-        let notes = vec![
-            GitlabNote {
-                body: Some("a".to_string()),
-                author: GitlabUser {
-                    username: Some("u1".to_string()),
-                },
-                system: false,
-            },
-            GitlabNote {
-                body: Some("changed assignee".to_string()),
-                author: GitlabUser {
-                    username: Some("bot".to_string()),
-                },
-                system: true,
-            },
-            GitlabNote {
-                body: Some("b".to_string()),
-                author: GitlabUser {
-                    username: Some("u2".to_string()),
-                },
-                system: false,
-            },
-        ];
-        let comments: Vec<RemoteComment> = notes
-            .into_iter()
-            .filter(|note| !note.system)
-            .map(|note| RemoteComment {
-                author: note.author.username.unwrap_or_default(),
-                body: note.body.unwrap_or_default(),
-            })
-            .collect();
-        assert_eq!(comments.len(), 2);
-        assert_eq!(comments[0].body, "a");
-        assert_eq!(comments[1].body, "b");
+    fn note_dto_tolerates_null_author() {
+        let body = r#"{"body": "hello", "author": null, "system": false}"#;
+        let note: GitLabNote = serde_json::from_str(body).expect("deserialize");
+        assert!(note.author.is_none());
     }
 }

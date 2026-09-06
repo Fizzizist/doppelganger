@@ -9,7 +9,7 @@ pub struct GitHubProvider {
 }
 
 impl GitHubProvider {
-    pub fn new(token: &str, owner: &str, repo: &str) -> crate::error::Result<Self> {
+    pub async fn new(token: &str, owner: &str, repo: &str) -> crate::error::Result<Self> {
         let client = octocrab::Octocrab::builder()
             .personal_token(token.to_string())
             .build()
@@ -93,7 +93,16 @@ mod tests {
             .project_path
             .split_once('/')
             .map(|(o, r)| (o.to_string(), r.to_string()))
-            .unwrap_or_default()
+            .expect("github project_path always has exactly owner/repo")
+    }
+
+    #[tokio::test]
+    async fn github_provider_builds_without_crypto_provider_panic() {
+        crate::remote::ensure_default_crypto_provider();
+        let provider = GitHubProvider::new("token", "owner", "repo")
+            .await
+            .expect("GitHub provider should build once a default crypto provider is installed");
+        let _ = provider;
     }
 
     #[test]
@@ -155,6 +164,9 @@ mod tests {
     #[test]
     fn parse_invalid_github_remote_url() {
         let url = "https://github.com/octocat";
-        assert!(matches!(parse_remote_url(url), Err(Error::NoRemote)));
+        assert!(matches!(
+            parse_remote_url(url),
+            Err(Error::MalformedRemote(_))
+        ));
     }
 }

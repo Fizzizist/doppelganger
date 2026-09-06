@@ -1215,6 +1215,7 @@ dependencies = [
  "pulldown-cmark",
  "ratatui",
  "ratatui-crossterm",
+ "rustls",
  "serde",
  "serde_json",
  "syntect",

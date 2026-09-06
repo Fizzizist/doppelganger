@@ -93,6 +93,15 @@ async fn sync_overwrite_nonexistent_issue_errors() {
         !output.status.success(),
         "should fail with nonexistent overwrite target"
     );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("panicked"),
+        "binary must fail with a clean error, not a panic, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("error:"),
+        "stderr should carry the CLI error prefix, got: {stderr}"
+    );
 }
 
 #[tokio::test]

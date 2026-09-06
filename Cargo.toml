@@ -23,6 +23,7 @@ octocrab = { version = "0.53.1", features = ["stream"] }
 pulldown-cmark = "0.13.4"
 ratatui = "0.30.1"
 ratatui-crossterm = "0.1.1"
+rustls = { version = "0.23.40", features = ["ring"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 syntect = "5.3.0"

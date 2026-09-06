@@ -251,10 +251,7 @@ email = "ci@example.com"
                 name: "Human".to_string(),
                 email: Some("h@example.com".to_string()),
             }),
-            profiles: HashMap::new(),
-            editor: default_editor(),
-            github: None,
-            gitlab: None,
+            ..Default::default()
         };
         let (name, email) = config.resolve(AuthorSelection::Robot).expect("resolve");
         assert_eq!(name, "Bot");
@@ -268,11 +265,7 @@ email = "ci@example.com"
                 name: "Alice".to_string(),
                 email: Some("alice@example.com".to_string()),
             }),
-            default_robot_author: None,
-            profiles: HashMap::new(),
-            editor: default_editor(),
-            github: None,
-            gitlab: None,
+            ..Default::default()
         };
         let (name, email) = config.resolve(AuthorSelection::Human).expect("resolve");
         assert_eq!(name, "Alice");
@@ -286,11 +279,7 @@ email = "ci@example.com"
                 name: "Alice".to_string(),
                 email: Some("alice@example.com".to_string()),
             }),
-            default_robot_author: None,
-            profiles: HashMap::new(),
-            editor: default_editor(),
-            github: None,
-            gitlab: None,
+            ..Default::default()
         };
         let (name1, _) = config
             .resolve(AuthorSelection::Human)
@@ -312,12 +301,8 @@ email = "ci@example.com"
             },
         );
         let config = Config {
-            default_human_author: None,
-            default_robot_author: None,
             profiles,
-            editor: default_editor(),
-            github: None,
-            gitlab: None,
+            ..Default::default()
         };
         let (name, email) = config
             .resolve(AuthorSelection::Named("ci".to_string()))
@@ -398,11 +383,7 @@ name = "Sneaky"
                 name: "Bot".to_string(),
                 email: None,
             }),
-            default_human_author: None,
-            profiles: HashMap::new(),
-            editor: default_editor(),
-            github: None,
-            gitlab: None,
+            ..Default::default()
         };
         let (_, email) = config.resolve(AuthorSelection::Robot).expect("resolve");
         assert_eq!(email, None);
