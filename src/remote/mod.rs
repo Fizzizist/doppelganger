@@ -32,11 +32,7 @@ pub struct RemoteTarget {
     pub secure: bool,
 }
 
-/// Both the `ring` and `aws_lc_rs` rustls features are enabled in this crate's
-/// dependency tree, so rustls cannot pick a provider from crate features alone.
-/// Installing one process default resolves the ambiguity for every client stack.
 pub fn ensure_default_crypto_provider() {
-    // A second install errs; the outcome (a ring default) is identical either way.
     let _ = rustls::crypto::ring::default_provider().install_default();
 }
 
