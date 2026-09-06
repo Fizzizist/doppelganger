@@ -56,8 +56,14 @@ pub enum Error {
     #[error("remote error: {0}")]
     Remote(String),
 
-    #[error("no git remote 'origin' found or not a GitHub repository")]
+    #[error("no git remote 'origin' found or not a supported forge repository")]
     NoRemote,
+
+    #[error("could not parse a repository path from git remote 'origin' ('{0}')")]
+    MalformedRemote(String),
+
+    #[error("only GitHub and GitLab remotes are supported; remote host is '{0}'")]
+    UnsupportedHost(String),
 
     #[error("remote sync error: {0}")]
     RemoteSync(String),

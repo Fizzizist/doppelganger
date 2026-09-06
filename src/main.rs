@@ -17,6 +17,7 @@ enum RunOutcome {
 #[tokio::main]
 async fn main() {
     logging::init();
+    doppelganger::remote::ensure_default_crypto_provider();
 
     match run().await {
         Ok(RunOutcome::FirstRun(path)) => {

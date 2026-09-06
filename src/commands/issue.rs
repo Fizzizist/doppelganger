@@ -92,7 +92,7 @@ async fn sync(
         ));
     }
 
-    let provider = remote::provider_from_config(config, repo)?;
+    let provider = remote::provider_from_config(config, repo).await?;
     let remote_issue = provider.fetch_issue(issue_number).await?;
     let conn = db.conn();
 

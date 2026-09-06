@@ -80,6 +80,11 @@ impl TestRepo {
         repo
     }
 
+    pub fn set_origin(&self, url: &str) {
+        let git_repo = git2::Repository::open(&self.path).expect("open repo");
+        git_repo.remote("origin", url).expect("add origin remote");
+    }
+
     pub fn new_no_git() -> Self {
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().to_path_buf();
