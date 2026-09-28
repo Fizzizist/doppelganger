@@ -147,10 +147,6 @@ cat > /tmp/dg-comment.md << 'DG_EOF'
 |---|---|---|
 | <summary> | genuine/nitpick/false-positive/deferred | <1-2 sentences> |
 
-### Action Plan
-
-<numbered list of what to fix, ordered by priority>
-
 ---
 *Assessment by doppelganger*
 DG_EOF
@@ -164,7 +160,6 @@ Update task: write-assess → completed, summary → in_progress.
 Present to the user:
 - Per-finding breakdown: summary, classification, reasoning
 - Counts: genuine, nitpicks, false positives, deferred
-- Action plan
 
 If any findings were classified as **deferred**, ask the user if they want to create issues for them:
 ```bash
