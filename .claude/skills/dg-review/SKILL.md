@@ -126,8 +126,6 @@ The assessor classifies each finding as:
 
 If a finding was already addressed in prior commits or dg branch discussion, classify as false positive with a note.
 
-After classifying all findings, produce an **action plan** listing what to fix, in what order.
-
 **Important guidance on "deferred" classifications:** Test coverage gaps should NOT be automatically deferred. If a branch adds new testable code, tests should ship with it — even if that means adding test infrastructure to a package that lacks it. Only defer tests when the gap is truly unrelated to the branch's changes (e.g., pre-existing untested code that the branch happens to touch). When tests are deferred, the assessor must note whether a tracking dg issue exists or needs to be created.
 
 Update task: assess → completed, write-assess → in_progress.
