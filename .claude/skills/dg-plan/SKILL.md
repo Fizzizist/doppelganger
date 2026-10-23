@@ -4,7 +4,7 @@ description: "Explore codebase, create implementation plan, create feature branc
 argument-hint: "<issue-number>"
 ---
 
-# dg-plan — Plan, Branch, and Open PR
+# dg-plan — Plan, Branch, and Doppelganger Branch
 
 **User input:** $ARGUMENTS
 
@@ -16,7 +16,7 @@ This command is strictly for **planning**. Do NOT implement any code changes —
 2. **HTML markers** — Use `<!-- dg-plan -->` as the first line of plan comment bodies for reliable discovery.
 3. **Safe git** — Never use `git add -A` or `git add .`. Stage files by name. Never stage secrets.
 4. **Task tracking** — Use the `update_task` tool to show progress through multi-step commands.
-5. **Project conventions** — Check for CLAUDE.md, AGENTS.md, .dreb/CONTEXT.md, and CONTRIBUTING.md before planning.
+5. **Project conventions** — Check for CLAUDE.md, AGENTS.md, and CONTRIBUTING.md before planning.
 
 ## Step 1: Set up task tracking
 
@@ -39,7 +39,7 @@ Update task: read → completed, explore → in_progress.
 
 Check for and read (first found):
 - CONTRIBUTING.md, DEVELOPMENT.md, .github/CONTRIBUTING.md
-- CLAUDE.md, AGENTS.md, .dreb/CONTEXT.md
+- CLAUDE.md, AGENTS.md
 
 Extract planning-relevant guidance: project layers, testing expectations, coding conventions.
 
@@ -81,8 +81,8 @@ Update task: plan → completed, branch → in_progress.
 
 ```bash
 # Derive branch name from issue
-# Format: feature/issue-<N>-<slug> (slug = 3-5 words from title, lowercase, hyphens)
-git checkout -b feature/issue-<N>-<slug>
+# Format: <issue-type>/issue-<N>-<slug> (slug = 3-5 words from title, lowercase, hyphens) (issue-type = feature, bug, etc.)
+git checkout -b <issue-type>/issue-<N>-<slug>
 
 cat > /tmp/dg-plan.md << 'DG_EOF'
 <!-- dg-plan -->
