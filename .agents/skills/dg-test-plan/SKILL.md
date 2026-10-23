@@ -60,6 +60,8 @@ Draft a test plan for each abstraction layer of the program:
 
 - For each layer, identify the behavioral changes needed to achieve the acceptance criteria in the issue.
 - Your plan should list a set of test cases per abstraction layer with the specific behavioral changes to be tested. 
+- An LOC estimate should be given for each layer including totals for test LOC and implementation LOC.
+    - If estimated implementation LOC is greater that 500, suggest to the user that this task should be broken up.
 
 Present the plan to the user. Discuss and revise if they have feedback.
 
