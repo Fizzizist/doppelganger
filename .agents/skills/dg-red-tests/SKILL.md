@@ -15,6 +15,8 @@ description: "Write failing tests for a plan from a doppelganger(dg) branch. Usa
 
 - **Tests Only** - No production code is allowed to change. Only new and existing test files are allowed to be changed. All new and modified tests must fail.
 - **Test Behavior, Not Implementation** - Tests must be written from the caller/user perspective. This means testing public functions, endpoints, APIs, etc. _Never_ test the internals of an abstraction layer.
+- **No Test Duplication** - Do not write tests that duplicate existing tests. If a test already exists for a behavior, do not write another one.
+- **Test behavior of the specific abstraction layer** - Each test must be written for the specific abstraction layer. Don't write a test that tests an underlying abstraction layers behavior. For example, don't test a service layer's behavior through an API view test.
 
 ## Step 1: Read the plan and comments
 
